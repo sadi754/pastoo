@@ -1,0 +1,8 @@
+# Python packages the app needs (run.bat installs them into .venv automatically).
+# The backup engine and the command line (backup.bat) need none of them.
+starlette==1.8.0     # local web server for the UI
+uvicorn==0.54.0      # runs the web server
+websockets==17.2     # live progress between the app and its window
+pywebview==6.2.1     # native window around the UI (Edge WebView2, built into Windows)
+pystray==0.19.5      # tray icon
+pillow==12.3.0       # draws the tray icon

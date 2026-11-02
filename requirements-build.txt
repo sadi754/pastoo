@@ -1,0 +1,2 @@
+# Extra Python packages for building Pastoo.exe (build.bat installs them into .venv).
+pyinstaller==6.22.3  # packs Pastoo and Python into a folder with Pastoo.exe

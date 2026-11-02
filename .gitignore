@@ -1,0 +1,9 @@
+# Python environment and build output
+.venv/
+__pycache__/
+*.pyc
+/build/
+/dist/
+
+# Private design notes (not part of the project)
+/DESIGN.md

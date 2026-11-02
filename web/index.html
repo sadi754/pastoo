@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pastoo</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Pastoo</div>
+  <nav class="tabs">
+    <a class="tab" href="#dashboard" data-view="dashboard">Dashboard</a>
+    <a class="tab" href="#history" data-view="history">History</a>
+    <a class="tab" href="#restore" data-view="restore">Restore</a>
+    <a class="tab" href="#settings" data-view="settings">Settings</a>
+  </nav>
+  <div class="spacer"></div>
+  <span class="muted" id="version"></span>
+</header>
+
+<div class="banner" id="offline" hidden>Lost the connection to Pastoo - is it still running in the tray?</div>
+<div class="banner error" id="error" hidden></div>
+<div class="banner" id="usage-warn" hidden></div>
+
+<main class="view" id="view-dashboard">
+  <section class="card welcome" id="welcome" hidden>
+    <h2 class="job-name">Welcome to Pastoo</h2>
+    <p class="muted">Pastoo backs up your folders to your own files.ir account. The first backup uploads
+      everything; after that only what changed goes up. Three steps to start:</p>
+    <ol>
+      <li>On <b>my.files.ir</b>: account settings → <b>Developers</b> → make an API key.</li>
+      <li>Here, <b>Settings → files.ir</b>: paste the key and press <b>Save key</b>.</li>
+      <li><b>Settings → Backup jobs → Add a folder</b>, then come back and press <b>Back up now</b>.</li>
+    </ol>
+    <button class="btn primary" id="welcome-go">Open Settings</button>
+  </section>
+</main>
+
+<main class="view" id="view-history" hidden>
+  <section class="card no-jobs-note"><p class="muted">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
+  <section class="card">
+    <header class="history-head">
+      <h2>History</h2>
+      <select id="history-job"></select>
+    </header>
+    <div class="history-split">
+      <div class="history-list">
+        <table class="runs selectable">
+          <thead><tr><th>When</th><th>Result</th><th class="num">New</th><th class="num">Changed</th><th class="num">Deleted</th><th class="num">Uploaded</th></tr></thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+        <button class="btn ghost" id="history-more" hidden>Show older runs</button>
+      </div>
+      <div class="history-detail" id="history-detail">
+        <div class="muted empty">Choose a run to see what it backed up.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<main class="view" id="view-restore" hidden>
+  <section class="card no-jobs-note"><p class="muted">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
+  <section class="card">
+    <header class="history-head">
+      <h2>Restore</h2>
+      <select id="restore-job"></select>
+      <select id="restore-source" title="What to restore from"></select>
+    </header>
+    <div class="restore-split">
+      <div class="restore-browser">
+        <input class="text" id="restore-filter" placeholder="Find a file or folder ..." spellcheck="false">
+        <div class="tree pick" id="restore-tree"><div class="loading">Loading ...</div></div>
+      </div>
+      <aside class="restore-side">
+        <div class="sel-summary" id="restore-summary">Tick the files or folders to get back.</div>
+        <div class="field-group">
+          <label class="radio"><input type="radio" name="restore-to" value="original" checked>
+            <span>Where they were<br><span class="muted" id="restore-original"></span></span></label>
+          <label class="radio"><input type="radio" name="restore-to" value="other">
+            <span>Another folder</span></label>
+          <div class="folder-row">
+            <input class="text" id="restore-folder" placeholder="e.g. D:\Restored" spellcheck="false">
+            <button class="btn" id="restore-browse">Browse ...</button>
+          </div>
+          <label class="radio"><input type="checkbox" id="restore-overwrite">
+            <span>Replace files that are already there<br><span class="muted">otherwise they are skipped</span></span></label>
+        </div>
+        <button class="btn primary" id="restore-go" disabled>Restore</button>
+        <div class="task" id="restore-task" hidden>
+          <div class="bar"><i></i></div>
+          <pre class="log"></pre>
+        </div>
+        <div class="result" id="restore-result" hidden></div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="card">
+    <header class="history-head"><h2>Check the backup</h2></header>
+    <p class="muted intro">Downloads bundles from files.ir and checks every file in them against the checksum
+      taken when it was backed up - so you know the backup really can be restored.</p>
+    <div id="verify-last" class="muted"></div>
+    <div class="actions">
+      <button class="btn" id="verify-some">Check 5 random bundles</button>
+      <button class="btn" id="verify-all">Check everything</button>
+      <button class="btn danger" id="verify-stop" hidden>Stop</button>
+    </div>
+    <div class="task" id="verify-task" hidden>
+      <div class="bar"><i></i></div>
+      <pre class="log"></pre>
+    </div>
+    <div class="result" id="verify-result" hidden></div>
+  </section>
+</main>
+
+<main class="view" id="view-settings" hidden>
+  <section class="card">
+    <header class="history-head"><h2>files.ir</h2></header>
+    <div class="key-row">
+      <span id="key-status" class="muted">...</span>
+      <span class="spacer"></span>
+      <button class="btn" id="key-test">Test the connection</button>
+    </div>
+    <div class="folder-row flat">
+      <input class="text" type="password" id="key-input" autocomplete="off" spellcheck="false"
+             placeholder="Paste a new key (my.files.ir: account settings → Developers)">
+      <button class="btn" id="key-save">Save key</button>
+    </div>
+    <p class="muted hint-line">The key is kept in Windows Credential Manager (Windows Credentials → Pastoo/files.ir), not in a file.</p>
+    <div class="usage">
+      <div class="usage-row plan-row"><span class="usage-label">Limits</span>
+        <select id="limits-mode">
+          <option value="auto">Read from files.ir</option>
+          <option value="custom">Set by hand</option>
+        </select>
+        <span class="muted" id="plan-limits"></span>
+        <button class="btn ghost small" id="limits-check">Check again</button></div>
+      <div class="usage-row plan-row" id="custom-limits" hidden><span class="usage-label"></span>
+        <span class="custom-fields">
+          <label>Space <input class="text num" type="number" id="custom-space" min="1"> GB</label>
+          <label>Files <input class="text num" type="number" id="custom-files" min="10"></label>
+          <label>Per file <input class="text num" type="number" id="custom-file" min="1"> MB</label>
+          <button class="btn" id="custom-save">Save</button>
+        </span></div>
+      <div class="usage-row"><span class="usage-label">Space</span>
+        <div class="meter"><i id="space-bar"></i></div><span id="space-text"></span></div>
+      <div class="usage-row"><span class="usage-label">Files</span>
+        <div class="meter"><i id="files-bar"></i></div><span id="files-text"></span></div>
+      <div class="muted hint-line" id="usage-note"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header class="history-head">
+      <h2>Backup jobs</h2>
+      <span class="spacer"></span>
+      <button class="btn" id="job-add">Add a folder</button>
+    </header>
+    <div id="job-forms"></div>
+  </section>
+
+  <section class="card">
+    <header class="history-head"><h2>App</h2></header>
+    <div class="field-group">
+      <label class="radio"><input type="checkbox" id="app-autostart">
+        <span>Start with Windows<br><span class="muted">in the tray, without the window</span></span></label>
+      <label class="inline">Remind me after
+        <input class="text num" type="number" id="app-reminder" min="1" max="365"> days without a backup
+        <span class="muted">(only when files changed)</span></label>
+    </div>
+  </section>
+</main>
+
+<template id="job-form">
+  <form class="job-form">
+    <div class="form-head" title="Show / hide this job's settings">
+      <span class="chevron" aria-hidden="true">▸</span>
+      <div class="form-head-text">
+        <h3 class="form-title"></h3>
+        <div class="form-sub muted"></div>
+      </div>
+      <span class="spacer"></span>
+      <span class="unsaved" hidden>unsaved changes</span>
+      <button type="button" class="btn ghost remove">Remove</button>
+    </div>
+    <div class="form-body">
+    <div class="grid2">
+      <label>Name<input class="text" name="name" maxlength="60"></label>
+      <label>Folder on files.ir<input class="text" name="remote_root" maxlength="100"></label>
+      <label class="span2">Folder to back up
+        <span class="folder-row flat"><input class="text" name="source" spellcheck="false"><button type="button" class="btn browse">Browse ...</button></span></label>
+      <div class="lock-note span2" hidden>This job has backups already, so its folder and its folder on files.ir stay as they are.</div>
+    </div>
+    <div class="rules">
+      <label>Skip folders named<textarea name="skip_dir_names" rows="6" spellcheck="false"></textarea><span class="hint">one per line, anywhere in the tree</span></label>
+      <label>Skip these paths<textarea name="skip_paths" rows="6" spellcheck="false"></textarea><span class="hint">relative to the folder, e.g. Projects/old</span></label>
+      <label>Skip files matching<textarea name="skip_files" rows="6" spellcheck="false"></textarea><span class="hint">e.g. *.mkv or ~$*</span></label>
+    </div>
+    <button type="button" class="btn ghost small common">+ Add common skips</button>
+    <span class="hint common-hint">Python / Node / PlatformIO build and cache folders, Windows thumbnail files, Office lock files</span>
+    <div class="measure muted">...</div>
+    <div class="grid4">
+      <label>Bundle size, MB<input class="text num" type="number" name="bundle_mb" min="1" max="45"><span class="hint">a folder up to this = one zip</span></label>
+      <label>Big file, MB<input class="text num" type="number" name="big_file_mb" min="1" max="45"><span class="hint">goes up on its own</span></label>
+      <label>Keep old versions<input class="text num" type="number" name="keep_versions" min="1" max="100"><span class="hint">newest per bundle ...</span></label>
+      <label>... or for days<input class="text num" type="number" name="keep_days" min="0" max="3650"><span class="hint">whichever keeps more</span></label>
+    </div>
+    <div class="warn" hidden></div>
+    <div class="form-foot">
+      <span class="form-msg"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn cancel">Undo changes</button>
+      <button type="submit" class="btn primary save">Save</button>
+    </div>
+    </div>
+  </form>
+</template>
+
+<div class="overlay" id="preview" hidden>
+  <section class="sheet">
+    <header class="sheet-head">
+      <div>
+        <h2 id="preview-title">Changes</h2>
+        <div class="muted" id="preview-sub"></div>
+      </div>
+      <button class="btn ghost" id="preview-close" aria-label="Close">✕</button>
+    </header>
+    <div class="sheet-body" id="preview-body"></div>
+    <footer class="sheet-foot">
+      <span class="muted" id="preview-foot"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="preview-cancel">Close</button>
+      <button class="btn primary" id="preview-backup">Back up now</button>
+    </footer>
+  </section>
+</div>
+
+<template id="job-card">
+  <section class="card job">
+    <header class="job-head" title="Show / hide details">
+      <span class="chevron" aria-hidden="true">▸</span>
+      <div class="job-head-text">
+        <h2 class="job-name"></h2>
+        <div class="muted job-route"></div>
+        <div class="muted job-summary"></div>
+      </div>
+      <span class="spacer"></span>
+      <span class="badge"></span>
+      <button class="btn primary small-backup">Back up now</button>
+    </header>
+
+    <div class="job-body">
+    <div class="tiles">
+      <div class="tile"><div class="tile-label">Last backup</div><div class="tile-value last"></div><div class="tile-sub last-sub"></div></div>
+      <div class="tile"><div class="tile-label">Backed up</div><div class="tile-value files"></div><div class="tile-sub size"></div></div>
+      <div class="tile"><div class="tile-label">On files.ir</div><div class="tile-value remote"></div><div class="tile-sub bundles"></div></div>
+      <div class="tile"><div class="tile-label">Old versions</div><div class="tile-value versions"></div><div class="tile-sub versions-sub"></div></div>
+    </div>
+
+    <div class="pending">
+      <span class="pending-text"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost review" hidden>Review changes</button>
+      <button class="btn ghost check">Check for changes</button>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary backup">Back up now</button>
+    </div>
+
+    <div class="progress" hidden>
+      <div class="progress-head">
+        <span class="phase"></span>
+        <span class="spacer"></span>
+        <span class="muted progress-numbers"></span>
+        <button class="btn danger stop">Stop</button>
+      </div>
+      <div class="bar"><i></i></div>
+      <pre class="log"></pre>
+    </div>
+
+    <div class="result" hidden></div>
+
+    <h3>Recent runs</h3>
+    <table class="runs">
+      <thead><tr><th>When</th><th>Result</th><th class="num">New</th><th class="num">Changed</th><th class="num">Deleted</th><th class="num">Bundles</th><th class="num">Uploaded</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
