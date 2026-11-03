@@ -6,22 +6,23 @@ import time
 import pystray
 
 from . import icons, winutil
+from .i18n import t
 from .util import human
 
 log = logging.getLogger(__name__)
 
 
-def ago(t):
-    if not t:
-        return "never"
-    s = time.time() - t
+def ago(when):
+    if not when:
+        return t("never")
+    s = time.time() - when
     if s < 90:
-        return "just now"
+        return t("just now")
     if s < 3600:
-        return f"{s / 60:.0f} min ago"
+        return t("{n} min ago", n=round(s / 60))
     if s < 86400 * 2:
-        return f"{s / 3600:.0f} h ago"
-    return f"{s / 86400:.0f} days ago"
+        return t("{n} h ago", n=round(s / 3600))
+    return t("{n} days ago", n=round(s / 86400))
 
 
 class _Icon(pystray.Icon):
@@ -33,7 +34,7 @@ class _Icon(pystray.Icon):
 
 
 class Tray:
-    def __init__(self, on_open, on_backup, can_back_up):
+    def __init__(self, on_open, on_backup, can_back_up, may_exit=lambda: True):
         self._size = winutil.small_icon_size()
         self._health = None
         self._icon = _Icon(
@@ -41,10 +42,11 @@ class Tray:
             icon=icons.icon(self._size, "ok"),
             title="Pastoo",
             menu=pystray.Menu(
-                pystray.MenuItem("Open Pastoo", lambda: on_open(), default=True),  # also a left-click
-                pystray.MenuItem("Back up now", lambda: on_backup(), enabled=lambda _: can_back_up()),
+                # texts as functions: read when the menu opens, so a language change shows at once
+                pystray.MenuItem(lambda _: t("Open Pastoo"), lambda: on_open(), default=True),  # also a left-click
+                pystray.MenuItem(lambda _: t("Back up now"), lambda: on_backup(), enabled=lambda _: can_back_up()),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Exit", self.stop),
+                pystray.MenuItem(lambda _: t("Exit"), lambda: may_exit() and self.stop()),
             ),
         )
 
@@ -61,15 +63,17 @@ class Tray:
             self._health = health
             self._icon.icon = icons.icon(self._size, health)
         if detail is None:
-            line = "No backups set up yet - open Pastoo to add a folder"
+            line = t("No backups set up yet - open Pastoo to add a folder")
         elif health == "running":
-            line = f"Backing up {detail['name']}"
+            line = t("Backing up {name}", name=detail["name"])
             if detail.get("total"):
-                line += f" - {detail['i']}/{detail['total']} bundles, {human(detail['sent'])}"
+                line += t(" - {i}/{total} bundles, {sent}", i=detail["i"], total=detail["total"], sent=human(detail["sent"]))
         elif health == "failed":
-            line = f"{detail['name']}: the last backup failed"
+            line = t("{name}: the last backup failed", name=detail["name"])
+        elif health == "held":
+            line = t("{name}: an automatic backup waits for your OK", name=detail["name"])
         else:
-            line = f"Last backup: {ago(detail['last_ok'])}" + (" - time for a backup" if health == "old" else "")
+            line = t("Last backup: {ago}", ago=ago(detail["last_ok"])) + (t(" - time for a backup") if health == "old" else "")
         self._icon.title = f"Pastoo\n{line}"[:127]     # Windows' tooltip limit
         self._icon.update_menu()
 

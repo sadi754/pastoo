@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from . import settings
 
 EDITABLE = ("name", "source", "remote_root", "skip_dir_names", "skip_paths", "skip_files",
-            "bundle_limit", "big_file", "keep_versions", "keep_days")
+            "bundle_limit", "big_file", "keep_versions", "keep_days", "schedule", "schedule_time", "schedule_hours")
+SCHEDULES = ("off", "daily", "hours")
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,9 @@ class Job:
     big_file: int = 5 << 20             # loose files this big go up on their own
     keep_versions: int = 5              # a replaced bundle is deleted only when it is older than
     keep_days: int = 30                 # keep_days AND not one of the keep_versions newest of its bundle
+    schedule: str = "off"               # automatic backups (while the app runs): "off" | "daily" | "hours"
+    schedule_time: str = "21:00"        # "daily": at this time (HH:MM, local)
+    schedule_hours: int = 6             # "hours": this long after the last backup
     part_size: int = 45 << 20           # bigger files go up in parts (files.ir's limit per file; from the plan)
     keep_reports: int = 50              # _changes/*.txt kept on files.ir (the History page keeps them all)
     changes_dir: str = "_changes"

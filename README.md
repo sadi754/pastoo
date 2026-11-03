@@ -35,13 +35,23 @@ restored - on this PC or on any other.
 - **Restore** - tick files or folders from the latest backup or an old version, put them
   back where they were or into another folder.
 - **Check the backup** - downloads bundles and compares every file with its checksum.
+- **Automatic backups (optional)** - every day at a set time or every few hours, while
+  Pastoo runs in the tray; a time missed while the PC was off is caught up after sign-in.
+- **Guard against mass deletion** - an automatic backup that would delete many files
+  (100, or a fifth of them) or change half of them at once waits for you to look first:
+  an emptied folder, ransomware or a slip of the mouse doesn't reach the backup. Moved
+  files don't count as deleted, and a folder whose drive isn't connected is never backed up
+  as "all deleted".
 - **Several jobs** - each with its own folder, its folder on files.ir and skip rules,
   with a live count of what would be backed up.
 - **files.ir plan aware** - reads your plan's limits (space, number of files, biggest
   upload) and shows how full the account is; files larger than one upload allows are
   sent in parts.
-- **Tray icon** - green, yellow (no backup for a while), red (the last one failed) or
-  blue (backing up); a reminder when there was no backup for some days and files changed.
+- **Tray icon** - green, yellow (no backup for a while, or an automatic one waits for
+  you), red (the last one failed) or blue (backing up); a reminder when there was no backup
+  for some days and files changed.
+- **English or Persian** - the window, the tray and the notifications; Persian is right to
+  left, with Jalali dates and Persian digits (Settings → App → Language; by default as Windows).
 - **No lock-in** - the bundles are ordinary zip files, and `_index.txt` lists which zip
   holds which file: without Pastoo, download a zip from the site and open it.
 - Your key stays in Windows Credential Manager; nothing is sent anywhere but files.ir.
@@ -81,8 +91,9 @@ protected your PC": **More info → Run anyway**.
 - **History** - every backup, and which files each one added, changed or deleted.
 - **Restore** - from the latest backup or an old version. Files that are already there are
   skipped unless you tick *Replace*. **Check the backup** verifies 5 random bundles or all.
-- **Settings** - jobs and skip rules, bundle size, how long old versions stay, the plan's
-  limits (read from files.ir or set by hand), *Start with Windows*, the reminder.
+- **Settings** - jobs and skip rules, bundle size, how long old versions stay, automatic
+  backups, the plan's limits (read from files.ir or set by hand), *Start with Windows*, the
+  reminder, the language.
 
 Only one backup, restore or check runs at a time - also between the app and the command line.
 
@@ -99,6 +110,15 @@ or its number in the NTFS change journal (USN) moved. The journal number moves o
 write and can't be put back, so a container whose date VeraCrypt restores is still seen.
 Drives without a journal (FAT, exFAT, network drives) fall back to size and date, and every
 file there is read again at least once a week.
+
+**Automatic backups.** They run inside Pastoo, so only while it runs in the tray - with
+*Start with Windows* on, that is whenever you are signed in (Settings warns when it is off,
+and *Exit* asks first). They start a few minutes after sign-in at the earliest, and one
+that finds nothing to do isn't added to the history. If one would delete at least 100
+files or a fifth of them (at least 10), or change half of them (at least 50) at once, it
+doesn't upload anything: the tray turns yellow, a notification says why, and the backup
+goes once you press **Back up now** after a look at the changes. Deleted files whose content
+is still in the folder under another name were only moved and don't count.
 
 **Files in use.** Files are read only while no other program is writing to them. A file
 that is in use keeps its last backed-up copy; if other files of its bundle changed, that

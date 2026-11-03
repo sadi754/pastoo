@@ -29,16 +29,16 @@
     <p class="muted">Pastoo backs up your folders to your own files.ir account. The first backup uploads
       everything; after that only what changed goes up. Three steps to start:</p>
     <ol>
-      <li>On <b>my.files.ir</b>: account settings → <b>Developers</b> → make an API key.</li>
-      <li>Here, <b>Settings → files.ir</b>: paste the key and press <b>Save key</b>.</li>
-      <li><b>Settings → Backup jobs → Add a folder</b>, then come back and press <b>Back up now</b>.</li>
+      <li data-t="welcome-1">On <b>my.files.ir</b>: account settings → <b>Developers</b> → make an API key.</li>
+      <li data-t="welcome-2">Here, <b>Settings → files.ir</b>: paste the key and press <b>Save key</b>.</li>
+      <li data-t="welcome-3"><b>Settings → Backup jobs → Add a folder</b>, then come back and press <b>Back up now</b>.</li>
     </ol>
     <button class="btn primary" id="welcome-go">Open Settings</button>
   </section>
 </main>
 
 <main class="view" id="view-history" hidden>
-  <section class="card no-jobs-note"><p class="muted">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
+  <section class="card no-jobs-note"><p class="muted" data-t="no-jobs">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
   <section class="card">
     <header class="history-head">
       <h2>History</h2>
@@ -60,7 +60,7 @@
 </main>
 
 <main class="view" id="view-restore" hidden>
-  <section class="card no-jobs-note"><p class="muted">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
+  <section class="card no-jobs-note"><p class="muted" data-t="no-jobs">Nothing is backed up yet - add a folder on the <a href="#settings">Settings</a> page.</p></section>
   <section class="card">
     <header class="history-head">
       <h2>Restore</h2>
@@ -168,6 +168,12 @@
       <label class="inline">Remind me after
         <input class="text num" type="number" id="app-reminder" min="1" max="365"> days without a backup
         <span class="muted">(only when files changed)</span></label>
+      <label class="inline">Language
+        <select id="app-language">
+          <option value="auto">Same as Windows</option>
+          <option value="en">English</option>
+          <option value="fa">فارسی</option>
+        </select></label>
     </div>
   </section>
 </main>
@@ -206,6 +212,17 @@
       <label>Keep old versions<input class="text num" type="number" name="keep_versions" min="1" max="100"><span class="hint">newest per bundle ...</span></label>
       <label>... or for days<input class="text num" type="number" name="keep_days" min="0" max="3650"><span class="hint">whichever keeps more</span></label>
     </div>
+    <div class="grid4 auto">
+      <label class="span2">Automatic backup<select name="schedule">
+        <option value="off">Off - only when I press Back up now</option>
+        <option value="daily">Every day at a set time</option>
+        <option value="hours">Every few hours</option>
+      </select></label>
+      <label class="auto-time">Time<input class="text num" type="time" name="schedule_time"></label>
+      <label class="auto-hours">Every, hours<input class="text num" type="number" name="schedule_hours" min="1" max="168"><span class="hint">after the last backup</span></label>
+    </div>
+    <p class="hint auto-hint">While Pastoo runs in the tray; if the PC was off at that time, a few minutes after you sign in.
+      An automatic backup that would delete or change many files at once waits for you to look first.</p>
     <div class="warn" hidden></div>
     <div class="form-foot">
       <span class="form-msg"></span>
@@ -291,6 +308,7 @@
   </section>
 </template>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -67,7 +67,8 @@ class Jobs(Base):
         self.assertEqual(saved["id"], "docs")
         self.assertEqual([j.id for j in jobs_mod.JOBS], ["photos", "docs"])
         self.assertEqual(jobs_mod.get("docs").bundle_limit, 10 << 20)
-        self.service.save_job(self.form(id="docs", name="My docs", keep_days=60))
+        self.service.save_job(self.form(id="docs", name="My docs", keep_days=60, schedule="daily", schedule_time="7:30"))
+        self.assertEqual((jobs_mod.get("docs").schedule, jobs_mod.get("docs").schedule_time), ("daily", "07:30"))
         self.assertEqual((jobs_mod.get("docs").name, jobs_mod.get("docs").keep_days), ("My docs", 60))
         self.assertEqual(settings.load()["jobs"][1]["name"], "My docs")       # on disk too
         self.service.remove_job("docs")
@@ -82,7 +83,10 @@ class Jobs(Base):
                          ({"remote_root": "photos BACKUP"}, "used by"),
                          ({"name": ""}, "name"),
                          ({"bundle_mb": 0}, "bundle mb"),
-                         ({"keep_versions": "5"}, "keep versions")):
+                         ({"keep_versions": "5"}, "keep versions"),
+                         ({"schedule": "weekly"}, "automatic backup"),
+                         ({"schedule": "daily", "schedule_time": "25:00"}, "a time"),
+                         ({"schedule": "hours", "schedule_hours": 0}, "1 to 168")):
             with self.assertRaises(ValueError) as cm:
                 self.service.save_job(self.form(**bad))
             self.assertIn(why, str(cm.exception))

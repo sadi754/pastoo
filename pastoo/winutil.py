@@ -130,6 +130,13 @@ def bring_to_front(hwnd):
     _user32.SetForegroundWindow(hwnd)
 
 
+def ask(title, text):
+    """A Yes / No question in a message box (on top of everything); True for Yes."""
+    MB_YESNO, MB_ICONQUESTION, MB_DEFBUTTON2, MB_SETFOREGROUND, MB_TOPMOST = 0x4, 0x20, 0x100, 0x10000, 0x40000
+    flags = MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2 | MB_SETFOREGROUND | MB_TOPMOST
+    return _user32.MessageBoxW(None, text, title, flags) == 6       # IDYES
+
+
 def style_dark_window(hwnd, caption_rgb):
     """Dark title bar (Windows 10/11) and a caption colour matching the app (Windows 11)."""
     dwmapi = ctypes.windll.dwmapi

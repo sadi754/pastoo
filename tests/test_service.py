@@ -4,15 +4,17 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pastoo import app, backuplog, jobs as jobs_mod, paths  # noqa: E402
+from pastoo import app, backuplog, jobs as jobs_mod, paths, settings  # noqa: E402
+from pastoo.engine import runner  # noqa: E402
 from pastoo.jobs import Job  # noqa: E402
 from pastoo.remote.fake import FakeDestination  # noqa: E402
 from pastoo.runlock import RunLock  # noqa: E402
-from pastoo.service import BackupService  # noqa: E402
+from pastoo.service import BackupService, next_auto  # noqa: E402
 from pastoo.store import Store  # noqa: E402
 
 
@@ -137,6 +139,72 @@ class ServiceTest(unittest.TestCase):
         gate.set()
         self.assertEqual(self.result["status"], "cancelled")
         self.assertEqual(self.service.status(self.job)["last_run"]["status"], "cancelled")
+
+    def auto_backup(self):
+        self.done.clear()
+        self.assertTrue(self.service.start("t", auto=True))
+        self.assertTrue(self.done.wait(10), "the backup did not finish")
+        self.service.wait_idle(5)
+        return self.result
+
+    def low_guard(self):
+        """The guard's limits for a folder of 3 files."""
+        saved = runner.GUARD_DELETED, runner.GUARD_MIN_FILES
+        runner.GUARD_DELETED, runner.GUARD_MIN_FILES = 100, 1
+        self.addCleanup(lambda: setattr(runner, "GUARD_DELETED", saved[0]) or setattr(runner, "GUARD_MIN_FILES", saved[1]))
+
+    def test_automatic_backup_waits_when_many_files_go(self):
+        self.backup()
+        self.low_guard()
+        os.remove(os.path.join(self.src, "a", "one.txt"))
+        result = self.auto_backup()
+        self.assertEqual((result["status"], result["error"]), ("held", "1 of 3 files deleted"))
+        self.assertEqual(self.service.status(self.job)["last_run"]["status"], "held")
+        self.assertEqual(self.service.health()[0], "held")
+        self.assertEqual(self.dest.uploads().count("_index.txt"), 1)        # nothing went up after the first
+        self.assertEqual(self.backup()["status"], "ok")                       # pressed by hand: it goes
+        self.assertNotEqual(self.service.health()[0], "held")
+
+    def test_moved_files_are_not_deleted_ones(self):
+        self.backup()
+        self.low_guard()
+        os.makedirs(os.path.join(self.src, "c"))
+        os.replace(os.path.join(self.src, "a", "one.txt"), os.path.join(self.src, "c", "one.txt"))
+        self.assertEqual(self.auto_backup()["status"], "ok")
+
+    def test_automatic_backup_with_nothing_to_do_stays_out_of_the_history(self):
+        self.backup()
+        before = len(self.service.history("t"))
+        self.assertEqual(self.auto_backup()["status"], "nothing")
+        self.assertEqual(len(self.service.history("t")), before)
+        self.assertIn("t", settings.load()["auto_checked"])
+
+    def test_missing_folder_is_refused(self):
+        self.backup()
+        shutil.rmtree(self.src)                                              # e.g. its drive unplugged
+        result = self.auto_backup()
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("isn't there", result["error"])
+        self.assertEqual(self.service.status(self.job)["files"], 3)         # the backup still has them all
+
+    def test_due_job(self):
+        hourly = Job(**{**self.job.__dict__, "schedule": "hours", "schedule_hours": 2})
+        jobs_mod.JOBS = [hourly]
+        self.assertEqual(self.service.due_job(), hourly)                     # never backed up: due
+        self.backup()
+        self.assertIsNone(self.service.due_job())
+        self.assertEqual(self.service.due_job(time.time() + 3 * 3600), hourly)
+        jobs_mod.JOBS = [self.job]                                           # "off"
+        self.assertIsNone(self.service.due_job(time.time() + 99 * 3600))
+
+    def test_next_daily_backup(self):
+        job = Job(**{**self.job.__dict__, "schedule": "daily", "schedule_time": "21:00"})
+        day = time.mktime((2026, 11, 2, 0, 0, 0, 0, 0, -1))
+        at = lambda h, m=0, d=0: day + d * 86400 + h * 3600 + m * 60   # noqa: E731
+        self.assertEqual(next_auto(job, at(21, 30, -1), at(20)), at(21))     # later today
+        self.assertEqual(next_auto(job, at(21, 30, -1), at(22)), at(21))     # passed today, not done: due
+        self.assertEqual(next_auto(job, at(21, 5), at(22)), at(21, 0, 1))    # done today: tomorrow
+        self.assertEqual(next_auto(job, at(9, 0, -3), at(8)), at(21, 0, -1))  # the PC was off: due now
 
     def test_tray_listener_takes_every_event(self):
         class FakeTray:

@@ -13,7 +13,7 @@ import random
 import threading
 import time
 
-from . import autostart, backuplog, jobs as jobs_mod, keystore, settings as settings_mod
+from . import autostart, backuplog, i18n, jobs as jobs_mod, keystore, settings as settings_mod
 from .settings import GB, MB
 from .engine import blob, restore as restore_mod, runner
 from .engine.plan import plan_units
@@ -27,6 +27,45 @@ from .store import Store
 log = logging.getLogger(__name__)
 
 LOG_LINES = 200             # lines of the current run kept for a window that opens late
+
+
+def _schedule_from(d):
+    """The automatic-backup fields of a job form, checked."""
+    mode = d.get("schedule", "off")
+    if mode not in jobs_mod.SCHEDULES:
+        raise ValueError("automatic backup: off, every day or every few hours")
+    at = d.get("schedule_time", "21:00")
+    try:
+        hh, mm = (int(x) for x in at.split(":"))
+        valid = 0 <= hh < 24 and 0 <= mm < 60
+    except (AttributeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError("automatic backup: a time such as 21:00")
+    hours = d.get("schedule_hours", 6)
+    if not isinstance(hours, int) or isinstance(hours, bool) or not 1 <= hours <= 168:
+        raise ValueError("automatic backup: every 1 to 168 hours")
+    return {"schedule": mode, "schedule_time": f"{hh:02d}:{mm:02d}", "schedule_hours": hours}
+
+
+def next_auto(job, last, now=None):
+    """When the job's next automatic backup is due (a time, maybe in the past: due now), or None
+    when it has none. last: when it was last backed up or tried (0 = never)."""
+    now = now or time.time()
+    if job.schedule == "hours":
+        return (last or 0) + job.schedule_hours * 3600
+    if job.schedule == "daily":
+        hh, mm = (int(x) for x in job.schedule_time.split(":"))
+
+        def at(day_offset):                     # that time of day, day_offset days from today
+            t = time.localtime(now)
+            return time.mktime((t.tm_year, t.tm_mon, t.tm_mday + day_offset, hh, mm, 0, 0, 0, -1))
+
+        slot = at(0) if at(0) <= now else at(-1)        # the latest time that has come
+        if (last or 0) < slot:
+            return slot                                 # missed (the PC was off) or just reached: due now
+        return at(1) if slot == at(0) else at(0)
+    return None
 
 
 class BackupService:
@@ -58,7 +97,10 @@ class BackupService:
             store.close()
         last = runs[0] if runs else None
         last_ok = next((r for r in runs if r["status"] in ("ok", "nothing")), None)
+        auto = next_auto(job, self._last_attempt(job, last))
         return {
+            "schedule": job.schedule, "schedule_time": job.schedule_time, "schedule_hours": job.schedule_hours,
+            "next_auto": auto,
             "id": job.id, "name": job.name, "source": job.source, "remote_root": job.remote_root,
             "files": len(state["files"]),
             "size": sum(f["size"] for f in state["files"].values()),
@@ -76,8 +118,32 @@ class BackupService:
     def statuses(self):
         return [self.status(j) for j in self.jobs()]
 
+    @staticmethod
+    def _last_attempt(job, last_run):
+        """When the job was last backed up or tried: its latest run, or an automatic check that found
+        nothing to do (those aren't kept in the history, so they don't fill it up)."""
+        checked = (settings_mod.load().get("auto_checked") or {}).get(job.id) or 0
+        return max(checked, last_run["started"] if last_run and last_run["status"] != "busy" else 0)
+
+    def due_job(self, now=None):
+        """A job whose automatic backup is due now, or None."""
+        now = now or time.time()
+        for job in self.jobs():
+            if job.schedule == "off":
+                continue
+            store = self.store_factory()
+            try:
+                runs = store.runs(job, limit=1)
+            finally:
+                store.close()
+            when = next_auto(job, self._last_attempt(job, runs[0] if runs else None), now)
+            if when is not None and when <= now:
+                return job
+        return None
+
     def health(self, reminder_days=None):
-        """For the tray: "running", "failed", "old" (no good backup for a while) or "ok"."""
+        """For the tray: "running", "failed", "held" (an automatic backup waits for a look), "old" (no
+        good backup for a while) or "ok"."""
         reminder_days = reminder_days or settings_mod.load()["reminder_days"]
         if self.run:
             return "running", self.run
@@ -87,6 +153,9 @@ class BackupService:
         for s in statuses:
             if s["last_run"] and s["last_run"]["status"] == "failed":
                 return "failed", s
+        for s in statuses:
+            if s["last_run"] and s["last_run"]["status"] == "held":
+                return "held", s
         oldest = min(statuses, key=lambda s: s["last_ok"] or 0)
         old = not oldest["last_ok"] or time.time() - oldest["last_ok"] > reminder_days * 86400
         return ("old" if old else "ok"), oldest
@@ -140,15 +209,16 @@ class BackupService:
         job = jobs_mod.get(job_id)
         threading.Thread(target=self._check, args=(job,), name="check", daemon=True).start()
 
-    def start(self, job_id):
-        """Start a backup; False if one is already running."""
+    def start(self, job_id, auto=False):
+        """Start a backup; False if one is already running. auto: an automatic one - it waits for
+        a look first when runner.guard() says so."""
         job = jobs_mod.get(job_id)
         if not self._busy.acquire(blocking=False):
             return False
         self._cancel.clear()
-        self.run = {"job": job.id, "name": job.name, "phase": "scanning", "started": time.time(),
+        self.run = {"job": job.id, "name": job.name, "phase": "scanning", "started": time.time(), "auto": auto,
                     "i": 0, "total": 0, "sent": 0, "lines": [], "result": None}
-        threading.Thread(target=self._run, args=(job,), name="backup", daemon=True).start()
+        threading.Thread(target=self._run, args=(job, auto), name="backup", daemon=True).start()
         return True
 
     def stop(self):
@@ -198,7 +268,7 @@ class BackupService:
             store.close()
         self._publish_job(job)
 
-    def _run(self, job):
+    def _run(self, job, auto=False):
         status, fields = "failed", {}
         store = self.store_factory()
         lock = self.lock_factory()
@@ -206,10 +276,13 @@ class BackupService:
         try:
             if locked:
                 self._publish_job(job)          # the card shows "running"
-                status, fields = self._backup(job, store)
+                status, fields = self._backup(job, store, auto)
             else:
                 self._line("== another backup is running (the command line?) - try again when it is done")
                 status, fields = "busy", {"error": "another backup was running"}
+        except runner.SourceMissing as e:       # expected now and then (a drive not plugged in): no traceback
+            self._line(f"== {e}")
+            fields = dict(fields, error=str(e))
         except Exception as e:
             log.exception("Backup failed")
             self._line(f"== error: {e}")
@@ -218,6 +291,8 @@ class BackupService:
             if locked:
                 lock.release()
             store.close()
+            if auto:
+                self._auto_checked(job)         # tried, whatever came of it: next time at the next slot
             if status in ("ok", "nothing"):
                 self.pending[job.id] = dict(self.pending.get(job.id) or {}, new=0, changed=0, deleted=0, todo=0,
                                             stale=0, checked=time.time())
@@ -229,8 +304,9 @@ class BackupService:
             self._busy.release()
             self._publish_job(job)
 
-    def _backup(self, job, store):
-        """One run, recorded in the history. Returns (status, fields)."""
+    def _backup(self, job, store, auto=False):
+        """One run, recorded in the history (an automatic one that finds nothing to do is not, so
+        the history doesn't fill up with them). Returns (status, fields)."""
         state = store.load(job)
         sc = runner.scan(job, state, warn=self._line)
         if runner.annotate(state, sc):
@@ -239,13 +315,20 @@ class BackupService:
         self._line(sc.summary(job), phase="uploading", total=len(sc.todo))
         fields = {"new": len(sc.new), "changed": len(sc.changed), "deleted": len(sc.gone)}
         details = runner.changes(state, sc)
-        run_id = store.start_run(job)
         if not runner.needs_run(state, sc):
             if runner.remember(state, sc):
                 store.save(job, state)
             self._line("== nothing changed")
-            store.finish_run(run_id, "nothing", **fields)
+            if not auto:
+                store.finish_run(store.start_run(job), "nothing", **fields)
             return "nothing", fields
+        reason = runner.guard(state, sc) if auto else None
+        if reason:
+            self._line(f"== held: {reason} - look at the changes, then press Back up now if they are right")
+            self.pending[job.id]["held"] = reason
+            store.finish_run(store.start_run(job), "held", changes=details, error=reason, **fields)
+            return "held", dict(fields, error=reason)
+        run_id = store.start_run(job)
         status = "failed"
         try:
             res = runner.upload(job, state, sc, self.destination_factory(), save=lambda: store.save(job, state),
@@ -262,6 +345,12 @@ class BackupService:
         finally:
             store.finish_run(run_id, status, changes=details, **fields)
         return status, fields
+
+    @staticmethod
+    def _auto_checked(job):
+        data = settings_mod.load()
+        data.setdefault("auto_checked", {})[job.id] = time.time()
+        settings_mod.save(data)
 
     def _emit(self, kind, msg, **data):
         update = {}
@@ -435,7 +524,8 @@ class BackupService:
     def settings_view(self):
         data = settings_mod.load()
         return {
-            "app": {"reminder_days": data["reminder_days"], "start_with_windows": autostart.enabled()},
+            "app": {"reminder_days": data["reminder_days"], "start_with_windows": autostart.enabled(),
+                    "language": data["language"]},
             "jobs": [dict(j.to_dict(), locked=self._has_backup(j)) for j in jobs_mod.JOBS],
             "key": "stored" if keystore.read() is not None else None,
             "new_job": settings_mod.NEW_JOB_SKIPS,
@@ -478,7 +568,8 @@ class BackupService:
             skip_dir_names=strings("skip_dir_names"), skip_paths=strings("skip_paths"),
             skip_files=strings("skip_files"),
             bundle_limit=number("bundle_mb", 1, 45, 1 << 20), big_file=number("big_file_mb", 1, 45, 1 << 20),
-            keep_versions=number("keep_versions", 1, 100), keep_days=number("keep_days", 0, 3650))
+            keep_versions=number("keep_versions", 1, 100), keep_days=number("keep_days", 0, 3650),
+            **_schedule_from(d))
 
     def measure(self, form):
         """What a job's rules (as on the form) would back up - for the live numbers on the Settings page."""
@@ -522,6 +613,10 @@ class BackupService:
 
     def save_app(self, changes):
         data = settings_mod.load()
+        if "language" in changes:
+            if changes["language"] not in i18n.LANGUAGES:
+                raise ValueError("language: automatic, English or Persian")
+            data["language"] = changes["language"]
         if "reminder_days" in changes:
             v = changes["reminder_days"]
             if not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= 365:

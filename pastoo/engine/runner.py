@@ -25,6 +25,12 @@ from .scan import hash_files, local_files
 
 JOBS = 4                    # uploads at the same time; files.ir takes ~4 s per request
 
+# An automatic backup stops for a look first (guard()) when it would delete this many files, or this
+# share of them (at least GUARD_MIN_FILES) - files that only moved don't count - or change this share
+# of them at once (at least GUARD_MIN_CHANGED): an emptied folder, ransomware, a slip of the mouse.
+GUARD_DELETED, GUARD_SHARE, GUARD_MIN_FILES = 100, 0.20, 10
+GUARD_CHANGED_SHARE, GUARD_MIN_CHANGED = 0.5, 50
+
 
 class Cancelled(Exception):
     pass
@@ -34,6 +40,11 @@ class Failed(Exception):
     def __init__(self, keys):
         super().__init__(f"{len(keys)} bundles failed")
         self.keys = keys
+
+
+class SourceMissing(Exception):
+    """The job's folder isn't there (its drive not plugged in, the letter changed): a scan would
+    make every file look deleted, so there is none."""
 
 
 @dataclass
@@ -67,6 +78,8 @@ class Scan:
 
 
 def scan(job, state, warn=None):
+    if not os.path.isdir(job.source):
+        raise SourceMissing(f"the folder {job.source} isn't there - is its drive connected?")
     known = state["files"]
     found = local_files(job)
     now = time.time()
@@ -147,6 +160,24 @@ def annotate(state, sc):
 
 def needs_run(state, sc):
     return not sc.nothing or not state["manifest_id"]
+
+
+def really_deleted(state, sc):
+    """The deleted files whose content isn't here under another name (moved or renamed ones are)."""
+    here = {sc.hashes[r] for r in sc.new}
+    return [r for r in sc.gone if state["files"][r]["sha1"] not in here]
+
+
+def guard(state, sc):
+    """Why an automatic backup should wait for you to look first, or None."""
+    total = len(state["files"])
+    deleted = len(really_deleted(state, sc))
+    if deleted >= GUARD_DELETED or (deleted >= GUARD_MIN_FILES and deleted >= GUARD_SHARE * total):
+        return f"{deleted} of {total} files deleted"
+    changed = len(sc.changed)
+    if changed >= GUARD_MIN_CHANGED and changed >= GUARD_CHANGED_SHARE * total:
+        return f"{changed} of {total} files changed at once"
+    return None
 
 
 def remember(state, sc):

@@ -191,7 +191,7 @@ def main(args):
         if cmd == "restore":
             return cmd_restore(job, store, args[1:])
         return cmd_history(job, store)
-    except RemoteError as e:        # e.g. no key
+    except (RemoteError, runner.SourceMissing) as e:        # e.g. no key, the drive not plugged in
         log(f"== error: {e}")
         return 1
     finally:

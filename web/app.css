@@ -75,6 +75,8 @@ button { font: inherit; }
 .job-name { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
 .job-route { font-size: 13px; user-select: text; }
 .busy-note { margin-top: 6px; color: var(--fair); font-size: 13px; }
+.job-form .auto { margin-top: 14px; }
+.auto-hint { margin: 6px 0 0; }
 .welcome p { margin: 0 0 10px; line-height: 1.6; }
 /* no jobs yet: History and Restore show only a note */
 .no-jobs-note { display: none; }
@@ -82,7 +84,7 @@ button { font: inherit; }
 .no-jobs-note a { color: var(--accent); }
 body.no-jobs .no-jobs-note { display: block; }
 body.no-jobs #view-history > :not(.no-jobs-note), body.no-jobs #view-restore > :not(.no-jobs-note) { display: none; }
-.welcome ol { margin: 0 0 16px; padding-left: 22px; line-height: 1.9; }
+.welcome ol { margin: 0 0 16px; padding-inline-start: 22px; line-height: 1.9; }
 
 .badge {
   padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -129,7 +131,7 @@ body.no-jobs #view-history > :not(.no-jobs-note), body.no-jobs #view-restore > :
 .bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
 .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 .bar.indeterminate i { width: 30%; animation: slide 1.2s ease-in-out infinite; }
-@keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+@keyframes slide { from { margin-inline-start: -30%; } to { margin-inline-start: 100%; } }
 .log {
   margin: 10px 0 0; max-height: 180px; overflow: auto; padding: 10px 12px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -144,9 +146,10 @@ body.no-jobs #view-history > :not(.no-jobs-note), body.no-jobs #view-restore > :
 
 h3 { margin: 20px 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
 .runs { width: 100%; border-collapse: collapse; font-size: 13px; }
-.runs th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.runs th { text-align: start; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .runs td { padding: 6px 8px; border-bottom: 1px solid var(--row-line); color: var(--text-2); }
-.runs .num { text-align: right; font-variant-numeric: tabular-nums; }
+.runs td { white-space: nowrap; }
+.runs .num { text-align: end; font-variant-numeric: tabular-nums; }
 .runs .status-ok { color: var(--good); }
 .runs .status-failed { color: var(--bad); }
 .runs .status-cancelled, .runs .status-running { color: var(--fair); }
@@ -164,8 +167,8 @@ h3 { margin: 20px 0 8px; font-size: 13px; color: var(--muted); text-transform: u
 }
 .callout b { color: var(--deleted); }
 .tree { font-size: 13px; user-select: text; }
-.tree details { margin-left: 14px; }
-.tree > details { margin-left: 0; }
+.tree details { margin-inline-start: 14px; }
+.tree > details { margin-inline-start: 0; }
 .tree summary { cursor: pointer; padding: 3px 0; color: var(--text); list-style: none; display: flex; gap: 8px; align-items: center; }
 .tree summary::before { content: "▸"; color: var(--muted); width: 10px; }
 .tree details[open] > summary::before { content: "▾"; }
@@ -174,13 +177,13 @@ h3 { margin: 20px 0 8px; font-size: 13px; color: var(--muted); text-transform: u
 .tree .count.new { color: var(--new); background: rgb(63 185 80 / .12); }
 .tree .count.changed { color: var(--changed); background: rgb(210 153 34 / .12); }
 .tree .count.deleted { color: var(--deleted); background: rgb(248 81 73 / .14); }
-.tree .file { display: flex; gap: 8px; align-items: baseline; margin-left: 32px; padding: 2px 0; }
+.tree .file { display: flex; gap: 8px; align-items: baseline; margin-inline-start: 32px; padding: 2px 0; }
 .tree .file .mark { width: 12px; font-weight: 700; text-align: center; }
 .tree .file.new .mark, .tree .file.new .name { color: var(--new); }
 .tree .file.changed .mark, .tree .file.changed .name { color: var(--changed); }
 .tree .file.deleted .mark, .tree .file.deleted .name { color: var(--deleted); }
 .tree .file.deleted .name { text-decoration: line-through; text-decoration-color: rgb(248 81 73 / .6); }
-.tree .file .size { color: var(--muted); font-size: 12px; margin-left: auto; padding-left: 16px; white-space: nowrap; }
+.tree .file .size { color: var(--muted); font-size: 12px; margin-inline-start: auto; padding-inline-start: 16px; white-space: nowrap; }
 .section-title { margin: 18px 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
 .bundle-list { font: 12px/1.6 "Cascadia Mono", Consolas, monospace; color: var(--text-2); user-select: text; }
 .bundle-list .size { color: var(--muted); }
@@ -227,7 +230,7 @@ input.text:focus { outline: none; border-color: var(--accent); }
   height: calc(100vh - 290px); min-height: 260px; overflow: auto;
 }
 .tree.pick summary, .tree.pick .file { gap: 6px; }
-.tree.pick .file { margin-left: 18px; color: var(--text-2); }
+.tree.pick .file { margin-inline-start: 18px; color: var(--text-2); }
 .tree.pick .file .name { color: var(--text); }
 .tree.pick input[type=checkbox] { margin: 0; accent-color: var(--accent); }
 .tree.pick .note { color: var(--muted); padding: 6px 4px; }
@@ -238,12 +241,12 @@ input.text:focus { outline: none; border-color: var(--accent); }
 .field-group { display: flex; flex-direction: column; gap: 10px; }
 .radio { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; line-height: 1.4; }
 .radio input { margin-top: 3px; accent-color: var(--accent); }
-.folder-row { display: flex; gap: 6px; margin-left: 22px; }
+.folder-row { display: flex; gap: 6px; margin-inline-start: 22px; }
 .task .log { max-height: 160px; }
 .intro { margin: 0 0 10px; line-height: 1.5; }
 #verify-last { margin-bottom: 4px; }
 #verify-last.bad { color: var(--bad); }
-.actions .btn + .btn { margin-left: 8px; }
+.actions .btn + .btn { margin-inline-start: 8px; }
 .folder-row .btn { white-space: nowrap; }
 
 /* ---------- settings ---------- */
@@ -251,7 +254,7 @@ input.text:focus { outline: none; border-color: var(--accent); }
 .key-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 #key-status.good { color: var(--good); }
 #key-status.bad { color: var(--bad); }
-.folder-row.flat { margin-left: 0; }
+.folder-row.flat { margin-inline-start: 0; }
 .hint-line { margin: 8px 0 0; font-size: 12px; }
 .job-form { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 12px; background: var(--bg); }
 .job-form.new { border-color: var(--accent); }
@@ -274,7 +277,7 @@ input.num { width: 100%; }
 .measure { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--panel-hi); line-height: 1.6; font-size: 13px; }
 .measure b { color: var(--text); }
 .measure .skips { display: grid; grid-template-columns: 1fr auto auto; gap: 0 14px; margin-top: 6px; font-size: 12px; }
-.measure .skips span:nth-child(3n+2), .measure .skips span:nth-child(3n) { text-align: right; font-variant-numeric: tabular-nums; }
+.measure .skips span:nth-child(3n+2), .measure .skips span:nth-child(3n) { text-align: end; font-variant-numeric: tabular-nums; }
 .warn { margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: rgb(210 153 34 / .12); color: var(--fair); font-size: 13px; line-height: 1.5; }
 .form-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 .form-msg.good { color: var(--good); }
@@ -291,7 +294,7 @@ label.inline input.num { width: 70px; }
 .job-form.folded { padding-top: 10px; padding-bottom: 10px; }
 .job-form .unsaved { color: var(--fair); font-size: 12px; }
 .btn.small { padding: 3px 10px; font-size: 12px; margin-top: 8px; }
-.common-hint { margin-left: 8px; color: var(--muted); font-size: 11px; }
+.common-hint { margin-inline-start: 8px; color: var(--muted); font-size: 11px; }
 
 /* ---------- folding job cards (dashboard) ---------- */
 .job-head { cursor: pointer; align-items: center; }
@@ -325,3 +328,24 @@ label.inline input.num { width: 70px; }
 .custom-fields label { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
 .custom-fields input.num { width: 90px; }
 #plan-limits.bad { color: var(--bad); }
+
+/* ---------- Persian (right to left) ---------- */
+@font-face {
+  font-family: "Vazirmatn";     /* SIL Open Font License - vendor/vazirmatn/OFL.txt */
+  src: url("vendor/vazirmatn/Vazirmatn-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root:lang(fa), :lang(fa) button, :lang(fa) input, :lang(fa) select, :lang(fa) textarea {
+  font-family: "Vazirmatn", "Segoe UI", system-ui, sans-serif;
+}
+:lang(fa) ol { list-style-type: persian; }
+/* what stays left to right: logs, paths, names typed in, the key */
+[dir="rtl"] .log, [dir="rtl"] .report-text, [dir="rtl"] textarea, [dir="rtl"] input[name="source"],
+[dir="rtl"] #restore-folder { direction: ltr; text-align: left; }
+[dir="rtl"] #restore-filter, [dir="rtl"] #key-input { unicode-bidi: plaintext; }
+/* names that may be either: each one takes the direction of its own text */
+.tree .name, .tree .dir, .tree .path, #restore-original, .form-sub, .bundle-list bdi { unicode-bidi: plaintext; }
+/* a folded chevron points to where the text starts */
+[dir="rtl"] .chevron { transform: scaleX(-1); }
+[dir="rtl"] .job-form:not(.folded) .form-head .chevron, [dir="rtl"] .job:not(.folded) .job-head .chevron { transform: rotate(90deg); }

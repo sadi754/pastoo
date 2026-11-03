@@ -42,7 +42,7 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from . import VERSION, jobs as jobs_mod, paths, settings as settings_mod
+from . import VERSION, i18n, jobs as jobs_mod, paths, settings as settings_mod
 
 log = logging.getLogger(__name__)
 
@@ -269,7 +269,7 @@ class WebServer:
         data = settings_mod.load()
         return {"type": "hello", "version": VERSION, "jobs": self.service.statuses(), "run": self.service.run,
                 "task": self.service.task, "reminder_days": data["reminder_days"], "folded": data.get("folded", {}),
-                "usage": self.service.last_usage}
+                "usage": self.service.last_usage, "lang": i18n.language(data)}
 
     # ---- from the service's threads
 

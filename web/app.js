@@ -18,28 +18,35 @@ let taskLines = [];
 
 function size(n) {
   n = n || 0;
-  const units = ["B", "KB", "MB", "GB"];
+  const units = LANG === "fa" ? ["بایت", "کیلوبایت", "مگابایت", "گیگابایت"] : ["B", "KB", "MB", "GB"];
   let i = 0;
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return i ? `${n.toFixed(1)} ${units[i]}` : `${n} B`;
+  return i ? `${num(n, 1)} ${units[i]}` : `${num(n)} ${units[0]}`;
 }
 
-function ago(t) {
-  if (!t) return "never";
-  const s = Date.now() / 1000 - t;
-  if (s < 90) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400 * 2) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} days ago`;
+function ago(time) {
+  if (!time) return t("never");
+  const s = Date.now() / 1000 - time;
+  if (s < 90) return t("just now");
+  if (s < 3600) return t("{n} min ago", { n: Math.round(s / 60) });
+  if (s < 86400 * 2) return t("{n} h ago", { n: Math.round(s / 3600) });
+  return t("{n} days ago", { n: Math.round(s / 86400) });
 }
 
-function when(t) {
-  const d = new Date(t * 1000);
+// Persian: the Jalali (Shamsi) calendar and Persian digits
+const FA_DATE = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit",
+                                                                hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+function when(time) {
+  const d = new Date(time * 1000);
+  if (LANG === "fa") return FA_DATE.format(d);
   const pad = (x) => String(x).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+function plural(n, word) {
+  return LANG === "fa" ? `${num(n)} ${FA_WORDS[word] || word}` : `${num(n)} ${word}${n === 1 ? "" : "s"}`;
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -48,7 +55,9 @@ function el(tag, cls, text) {
   return e;
 }
 
-const STATUS_TEXT = { ok: "Done", nothing: "No changes", failed: "Failed", cancelled: "Stopped", running: "Running" };
+const STATUS_TEXT = { ok: "Done", nothing: "No changes", failed: "Failed", cancelled: "Stopped", running: "Running",
+                      held: "Waited for OK" };
+const statusText = (status) => (STATUS_TEXT[status] ? t(STATUS_TEXT[status]) : status);
 
 // ---------- the change tree (preview and history) ----------
 
@@ -75,7 +84,7 @@ function buildTree(ch) {
 function counts(c) {
   const f = document.createDocumentFragment();
   for (const kind of ["new", "changed", "deleted"]) {
-    if (c[kind]) f.append(el("span", `count ${kind}`, `${kind === "new" ? "+" : kind === "changed" ? "~" : "−"}${c[kind]}`));
+    if (c[kind]) f.append(el("span", `count ${kind}`, `${kind === "new" ? "+" : kind === "changed" ? "~" : "−"}${num(c[kind])}`));
   }
   return f;
 }
@@ -100,7 +109,7 @@ function renderNode(node, depth, openAll) {
   const marks = { new: "+", changed: "~", deleted: "−" };
   for (const file of node.files.sort((a, b) => a.name.localeCompare(b.name))) {
     const row = el("div", `file ${file.kind}`);
-    row.title = file.bundle ? `in ${file.bundle}` : "";
+    row.title = file.bundle ? t("in {bundle}", { bundle: file.bundle }) : "";
     row.append(el("span", "mark", marks[file.kind]), el("span", "name", file.name), el("span", "size", size(file.bytes)));
     f.append(row);
   }
@@ -112,24 +121,25 @@ function renderChanges(target, ch, { forPreview }) {
   const n = (ch.new || []).length, c = (ch.changed || []).length, d = (ch.deleted || []).length;
   const bundles = ch.bundles || [];
   const chips = el("div", "chips");
-  if (ch.first) chips.append(el("span", "chip", `First backup: ${plural(n, "file")}`));
+  if (ch.first) chips.append(el("span", "chip", t("First backup: {files}", { files: plural(n, "file") })));
   else {
-    chips.append(el("span", "chip new", `${n} new`), el("span", "chip changed", `${c} changed`),
-                 el("span", "chip deleted", `${d} deleted`));
+    chips.append(el("span", "chip new", t("{n} new", { n })), el("span", "chip changed", t("{n} changed", { n: c })),
+                 el("span", "chip deleted", t("{n} deleted", { n: d })));
   }
   const raw = bundles.reduce((s, b) => s + b[2], 0);
-  chips.append(el("span", "chip", `${plural(bundles.length, "bundle")} · ${size(raw)} before zipping`));
+  chips.append(el("span", "chip", t("{bundles} · {size} before zipping", { bundles: plural(bundles.length, "bundle"), size: size(raw) })));
   target.append(chips);
 
   if (d && forPreview) {
     const box = el("div", "callout");
-    box.innerHTML = `<b>${plural(d, "file")} deleted</b> since the last backup (in red below). ` +
-      `The backup will no longer have ${d === 1 ? "it" : "them"} in its current bundles; the old bundles stay in ` +
-      `<b>_versions</b> for at least 30 days. If a deletion was a mistake, close this and restore the file first.`;
+    box.innerHTML = LANG === "fa" || d !== 1
+      ? t("<b>{files} deleted</b> since the last backup (in red below). The backup will no longer have them in its current bundles; the old bundles stay in <b>_versions</b> for at least 30 days. If a deletion was a mistake, close this and restore the file first.", { files: plural(d, "file") })
+      : "<b>1 file deleted</b> since the last backup (in red below). The backup will no longer have it in its current " +
+        "bundles; the old bundles stay in <b>_versions</b> for at least 30 days. If the deletion was a mistake, close this and restore the file first.";
     target.append(box);
   }
   if (!n && !c && !d && !bundles.length && !(ch.stale || []).length) {
-    target.append(el("div", "loading", "Nothing changed since the last backup."));
+    target.append(el("div", "loading", t("Nothing changed since the last backup.")));
     return;
   }
   if (n || c || d) {
@@ -138,17 +148,17 @@ function renderChanges(target, ch, { forPreview }) {
     target.append(tree);
   }
   if (bundles.length) {
-    target.append(el("div", "section-title", forPreview ? "Bundles to upload" : "Bundles uploaded"));
+    target.append(el("div", "section-title", t(forPreview ? "Bundles to upload" : "Bundles uploaded")));
     const list = el("div", "bundle-list");
     for (const [key, files, bytes] of bundles) {
       const row = el("div");
-      row.append(key + "  ", el("span", "size", `${plural(files, "file")}, ${size(bytes)}`));
+      row.append(el("bdi", "", key), "  ", el("span", "size", t("{files}, {size}", { files: plural(files, "file"), size: size(bytes) })));
       list.append(row);
     }
     target.append(list);
   }
   if ((ch.stale || []).length) {
-    target.append(el("div", "section-title", "Bundles split into smaller ones (old ones go to _versions)"));
+    target.append(el("div", "section-title", t("Bundles split into smaller ones (old ones go to _versions)")));
     const list = el("div", "bundle-list");
     ch.stale.forEach((k) => list.append(el("div", "", k)));
     target.append(list);
@@ -157,21 +167,30 @@ function renderChanges(target, ch, { forPreview }) {
 
 // ---------- preview sheet ----------
 
+// "  ·  automatic: every day at 21:00, next ..." for a job's card
+function autoText(job) {
+  if (!job.schedule || job.schedule === "off") return "";
+  const how = job.schedule === "daily" ? t("every day at {time}", { time: digits(job.schedule_time) })
+    : t("every {hours}", { hours: plural(job.schedule_hours, "hour") });
+  const next = job.next_auto && job.next_auto * 1000 > Date.now() ? t(", next {when}", { when: when(job.next_auto) }) : t(", next soon");
+  return t("automatic: {how}{next}", { how, next });
+}
+
 // files another program is writing to (a mounted VeraCrypt container, an open .pst ...)
 function busyText(names, count, waiting) {
   const which = names.map((r) => r.split("/").pop()).join(", ") + (count > names.length ? " ..." : "");
-  return `${plural(count, "file")} in use by another program (${which}): the last backed-up copy stays`
-    + (waiting ? `, and ${plural(waiting, "bundle")} with other changes ${waiting === 1 ? "waits" : "wait"}` : "")
-    + ". Close it, then back up again.";
+  return t("{files} in use by another program ({which}): the last backed-up copy stays", { files: plural(count, "file"), which })
+    + (waiting ? t(", and {bundles} with other changes wait", { bundles: plural(waiting, "bundle") }).replace(/wait$/, waiting === 1 ? "waits" : "wait") : "")
+    + t(". Close it, then back up again.");
 }
 
 function openPreview(jobId) {
   previewJob = jobId;
   const job = cards.get(jobId).job;
-  $("preview-title").textContent = `Changes in ${job.name}`;
-  $("preview-sub").textContent = "Looking for changes ...";
+  $("preview-title").textContent = t("Changes in {name}", { name: job.name });
+  $("preview-sub").textContent = t("Looking for changes ...");
   $("preview-foot").textContent = "";
-  $("preview-body").replaceChildren(el("div", "loading", "Looking for changes ..."));
+  $("preview-body").replaceChildren(el("div", "loading", t("Looking for changes ...")));
   $("preview-backup").disabled = true;
   $("preview").hidden = false;
   send({ type: "preview", job: jobId });
@@ -179,13 +198,14 @@ function openPreview(jobId) {
 
 function showPreview(m) {
   if (m.job !== previewJob || $("preview").hidden) return;
-  $("preview-sub").textContent = `${cards.get(m.job).job.source} · checked ${ago(m.checked)}`;
+  $("preview-sub").textContent = t("{source} · checked {when}", { source: cards.get(m.job).job.source, when: ago(m.checked) });
   renderChanges($("preview-body"), m, { forPreview: true });
   const d = (m.deleted || []).length;
-  $("preview-foot").textContent = d ? `${plural(d, "deleted file")} will leave the current backup` : "";
+  $("preview-foot").textContent = d ? t("{files} will leave the current backup", { files: plural(d, "deleted file") }) : "";
   const busy = m.busy || [];
   if (busy.length) $("preview-body").prepend(el("div", "busy-note", busyText(busy.slice(0, 5), busy.length, (m.waiting || []).length)));
-  $("preview-backup").textContent = d ? `Back up now (with ${plural(d, "deletion")})` : "Back up now";
+  $("preview-backup").textContent = d ? t("Back up now (with {n} deletions)", { n: d }).replace("(with 1 deletions)", "(with 1 deletion)")
+    : t("Back up now");
   $("preview-backup").disabled = !!run || !(m.bundles.length || (m.stale || []).length || d);
 }
 
@@ -219,7 +239,7 @@ function card(job) {
     };
     node.classList.toggle("folded", cardFolds[job.id] ?? false);
     node.querySelector(".check").onclick = () => {
-      node.querySelector(".pending-text").textContent = "Checking ...";
+      node.querySelector(".pending-text").textContent = t("Checking ...");
       send({ type: "check", job: job.id });
     };
     node.querySelector(".review").onclick = () => openPreview(job.id);
@@ -253,35 +273,42 @@ function foldCard(jobId, fold) {
 
 function pendingShort(p) {
   if (!p || p.error) return "";
-  if (!(p.new || p.changed || p.deleted || p.todo)) return "no changes";
+  if (!(p.new || p.changed || p.deleted || p.todo)) return t("no changes");
+  return `<span class="changes">${changeParts(p) || t("bundles to tidy up")}</span> ${ARROW()} ${plural(p.todo, "bundle")}`;
+}
+
+// "3 new, 1 changed, 2 deleted" (deleted in red)
+function changeParts(p) {
   const parts = [];
-  if (p.new) parts.push(`${p.new} new`);
-  if (p.changed) parts.push(`${p.changed} changed`);
-  if (p.deleted) parts.push(`<span class="deleted-count">${p.deleted} deleted</span>`);
-  return `<span class="changes">${parts.join(", ") || "bundles to tidy up"}</span> → ${plural(p.todo, "bundle")}`;
+  if (p.new) parts.push(t("{n} new", { n: p.new }));
+  if (p.changed) parts.push(t("{n} changed", { n: p.changed }));
+  if (p.deleted) parts.push(`<span class="deleted-count">${t("{n} deleted", { n: p.deleted })}</span>`);
+  return parts.join(LANG === "fa" ? "، " : ", ");
 }
 
 function health(job) {
-  if (run && run.job === job.id) return ["running", "Backing up"];
-  if (job.last_run && job.last_run.status === "failed") return ["failed", "Last backup failed"];
+  if (run && run.job === job.id) return ["running", t("Backing up")];
+  if (job.last_run && job.last_run.status === "failed") return ["failed", t("Last backup failed")];
+  if (job.last_run && job.last_run.status === "held") return ["waiting", t("Needs your OK")];
   const p = job.pending;
-  if (p && !p.error && (p.new || p.changed || p.deleted || p.todo)) return ["waiting", "Changes to back up"];
-  if (!job.last_ok) return ["old", "Never backed up"];
-  if (Date.now() / 1000 - job.last_ok > REMINDER_DAYS * 86400) return ["old", "Time for a backup"];
-  return ["ok", "Up to date"];
+  if (p && !p.error && (p.new || p.changed || p.deleted || p.todo)) return ["waiting", t("Changes to back up")];
+  if (!job.last_ok) return ["old", t("Never backed up")];
+  if (Date.now() / 1000 - job.last_ok > REMINDER_DAYS * 86400) return ["old", t("Time for a backup")];
+  return ["ok", t("Up to date")];
 }
 
 function runRow(r, columns) {
   const tr = document.createElement("tr");
   const all = {
-    when: when(r.started), result: STATUS_TEXT[r.status] || r.status, new: r.new ?? "", changed: r.changed ?? "",
-    deleted: r.deleted ?? "", bundles: r.bundles ?? "", sent: r.sent ? size(r.sent) : "",
+    when: when(r.started), result: statusText(r.status), new: r.new == null ? "" : num(r.new),
+    changed: r.changed == null ? "" : num(r.changed), deleted: r.deleted == null ? "" : num(r.deleted),
+    bundles: r.bundles == null ? "" : num(r.bundles), sent: r.sent ? size(r.sent) : "",
   };
   for (const col of columns) {
     const td = el("td", ["when", "result"].includes(col) ? "" : "num", all[col]);
     if (col === "result") {
       td.className = `status-${r.status}`;
-      if (r.error) td.title = r.error;
+      if (r.error) td.title = tMsg(r.error);
     }
     tr.append(td);
   }
@@ -292,7 +319,9 @@ function renderJob(job) {
   const { el: node } = card(job);
   const q = (s) => node.querySelector(s);
   q(".job-name").textContent = job.name;
-  q(".job-route").textContent = `${job.source}  →  files.ir / ${job.remote_root}`;
+  // the folder stays left to right in the Persian page (<bdi>)
+  q(".job-route").replaceChildren(el("bdi", "", `${job.source}  →  files.ir / ${job.remote_root}`),
+                                  autoText(job) ? `  ·  ${autoText(job)}` : "");
   const [cls, text] = health(job);
   q(".badge").className = `badge ${cls}`;
   q(".badge").textContent = text;
@@ -300,28 +329,30 @@ function renderJob(job) {
   const last = job.last_run;
   q(".last").textContent = ago(job.last_ok);
   q(".last").className = "tile-value last " + (cls === "failed" ? "bad" : cls === "old" ? "fair" : "");
-  q(".last-sub").textContent = last ? `${when(last.started)} · ${STATUS_TEXT[last.status] || last.status}` : "";
-  q(".files").textContent = `${job.files.toLocaleString()} files`;
+  q(".last-sub").textContent = last ? `${when(last.started)} · ${statusText(last.status)}` : "";
+  q(".files").textContent = t("{n} files", { n: job.files });
   q(".size").textContent = size(job.size);
   q(".remote").textContent = size(job.remote_size);
   q(".bundles").textContent = plural(job.bundles, "bundle");
-  q(".versions").textContent = job.versions;
-  q(".versions-sub").textContent = job.versions ? size(job.versions_size) : "none yet";
+  q(".versions").textContent = num(job.versions);
+  q(".versions-sub").textContent = job.versions ? size(job.versions_size) : t("none yet");
 
   const p = job.pending;
   const pt = q(".pending-text");
   const changes = p && !p.error && (p.new || p.changed || p.deleted || p.todo);
-  if (!p) pt.textContent = "Not checked yet";
-  else if (p.error) pt.textContent = `Checking failed: ${p.error}`;
-  else if (!changes) pt.innerHTML = `No changes since the last backup <span class="muted">· checked ${ago(p.checked)}</span>`;
+  const checked = p ? `<span class="muted">${t("· checked {when}", { when: ago(p.checked) })}</span>` : "";
+  if (!p) pt.textContent = t("Not checked yet");
+  else if (p.error) pt.textContent = t("Checking failed: {error}", { error: tMsg(p.error) });
+  else if (!changes) pt.innerHTML = `${t("No changes since the last backup")} ${checked}`;
   else {
-    const parts = [];
-    if (p.new) parts.push(`${p.new} new`);
-    if (p.changed) parts.push(`${p.changed} changed`);
-    if (p.deleted) parts.push(`<span class="deleted-count">${p.deleted} deleted</span>`);
-    pt.innerHTML = `<span class="changes">${parts.join(", ") || "Bundles to tidy up"}</span> → <b>${plural(p.todo, "bundle")}</b> to upload <span class="muted">· checked ${ago(p.checked)}</span>`;
+    pt.innerHTML = `<span class="changes">${changeParts(p) || t("Bundles to tidy up")}</span> ${ARROW()} ` +
+      `${t("{bundles} to upload", { bundles: `<b>${plural(p.todo, "bundle")}</b>` })} ${checked}`;
   }
   if (p && p.busy_count) pt.append(el("div", "busy-note", busyText(p.busy, p.busy_count, p.waiting)));
+  if (job.last_run && job.last_run.status === "held") {
+    pt.append(el("div", "busy-note", t("The automatic backup waits for you: {why}. Look at the changes, then press Back up now if they are right.",
+                                         { why: tMsg(job.last_run.error) })));
+  }
   q(".review").hidden = !changes;
 
   const busy = !!run || !!task;
@@ -332,8 +363,8 @@ function renderJob(job) {
   // the one line a folded card shows
   const short = pendingShort(p);
   q(".job-summary").innerHTML = run && run.job === job.id
-    ? `Backing up - ${run.total ? `${run.i} / ${plural(run.total, "bundle")}` : "looking for changes"}`
-    : `Last backup ${ago(job.last_ok)}${short ? ` · ${short}` : ""}`;
+    ? t("Backing up - {progress}", { progress: run.total ? `${num(run.i)} / ${plural(run.total, "bundle")}` : t("looking for changes") })
+    : t("Last backup {when}", { when: ago(job.last_ok) }) + (short ? ` · ${short}` : "");
   q(".runs tbody").replaceChildren(...job.recent.map(
     (r) => runRow(r, ["when", "result", "new", "changed", "deleted", "bundles", "sent"])));
 }
@@ -348,14 +379,15 @@ function renderRun() {
       node.classList.remove("folded");
     }
     node.querySelector(".result").hidden = true;
-    const phase = { scanning: "Looking for changes ...", uploading: "Uploading", finishing: "Finishing ..." }[run.phase] || run.phase;
+    const phase = t({ scanning: "Looking for changes ...", uploading: "Uploading", finishing: "Finishing ..." }[run.phase] || run.phase);
     node.querySelector(".phase").textContent = phase;
     const bar = node.querySelector(".bar");
     const known = run.phase === "uploading" && run.total > 0;
     bar.classList.toggle("indeterminate", !known);
     bar.querySelector("i").style.width = known ? `${(100 * run.i) / run.total}%` : "";
     node.querySelector(".progress-numbers").textContent = known
-      ? `${run.i} / ${plural(run.total, "bundle")} · ${size(run.sent)} sent · ${Math.round(Date.now() / 1000 - run.started)} s` : "";
+      ? t("{i} / {bundles} · {size} sent · {s} s", { i: run.i, bundles: plural(run.total, "bundle"), size: size(run.sent),
+                                                         s: Math.round(Date.now() / 1000 - run.started) }) : "";
     const log = node.querySelector(".log");
     const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
     log.textContent = lines.join("\n");
@@ -370,11 +402,13 @@ function showResult(r) {
   const box = c.el.querySelector(".result");
   box.className = `result ${res.status}`;
   box.textContent = {
-    ok: `Backup finished: ${plural(res.bundles || 0, "bundle")}, ${size(res.sent)} uploaded` + (res.report ? ` · report ${res.report}` : ""),
-    nothing: "Nothing changed - the backup is up to date.",
-    cancelled: "Stopped. The next backup continues where this one stopped.",
-    failed: `The backup failed: ${res.error || "see the log"}. Run it again - it continues where it stopped.`,
-    busy: "Another backup is running (from the command line?). Try again when it is done.",
+    ok: t("Backup finished: {bundles}, {size} uploaded", { bundles: plural(res.bundles || 0, "bundle"), size: size(res.sent) })
+      + (res.report ? t(" · report {report}", { report: res.report }) : ""),
+    nothing: t("Nothing changed - the backup is up to date."),
+    cancelled: t("Stopped. The next backup continues where this one stopped."),
+    failed: t("The backup failed: {error}. Run it again - it continues where it stopped.", { error: tMsg(res.error) || t("see the log") }),
+    busy: t("Another backup is running (from the command line?). Try again when it is done."),
+    held: t("The automatic backup waits for you: {why}.", { why: tMsg(res.error) }),
   }[res.status] || res.status;
   box.hidden = false;
   c.el.querySelector(".stop").disabled = false;
@@ -388,7 +422,7 @@ function loadHistory(before) {
   if (!before) {
     history = { job, runs: [], selected: null };
     $("history-rows").replaceChildren();
-    $("history-detail").replaceChildren(el("div", "muted empty", "Choose a run to see what it backed up."));
+    $("history-detail").replaceChildren(el("div", "muted empty", t("Choose a run to see what it backed up.")));
   }
   send({ type: "history", job, before });
 }
@@ -403,13 +437,13 @@ function showHistory(m) {
       history.selected = r.id;
       for (const row of $("history-rows").children) row.classList.remove("selected");
       tr.classList.add("selected");
-      $("history-detail").replaceChildren(el("div", "loading", "Loading ..."));
+      $("history-detail").replaceChildren(el("div", "loading", t("Loading ...")));
       send({ type: "run_detail", job: history.job, id: r.id });
     };
     return tr;
   }));
   $("history-more").hidden = !m.more;
-  if (!history.runs.length) $("history-detail").replaceChildren(el("div", "muted empty", "No backups yet."));
+  if (!history.runs.length) $("history-detail").replaceChildren(el("div", "muted empty", t("No backups yet.")));
 }
 
 function showRunDetail(m) {
@@ -417,19 +451,19 @@ function showRunDetail(m) {
   if (m.job !== history.job || r.id !== history.selected) return;
   const box = $("history-detail");
   box.replaceChildren();
-  box.append(el("div", "detail-title", `${when(r.started)} · ${STATUS_TEXT[r.status] || r.status}`));
+  box.append(el("div", "detail-title", `${when(r.started)} · ${statusText(r.status)}`));
   const facts = [];
-  if (r.finished) facts.push(`took ${Math.max(1, Math.round(r.finished - r.started))} s`);
-  if (r.sent) facts.push(`${size(r.sent)} uploaded`);
-  if (r.report) facts.push(`report: ${r.report}`);
+  if (r.finished) facts.push(t("took {s} s", { s: Math.max(1, Math.round(r.finished - r.started)) }));
+  if (r.sent) facts.push(t("{size} uploaded", { size: size(r.sent) }));
+  if (r.report) facts.push(t("report: {report}", { report: r.report }));
   box.append(el("div", "muted", facts.join(" · ")));
-  if (r.error) box.append(el("div", "callout", r.error));
+  if (r.error) box.append(el("div", "callout", tMsg(r.error)));
   const body = el("div");
   body.style.marginTop = "14px";
   box.append(body);
   if (r.changes) renderChanges(body, r.changes, { forPreview: false });
   else if (r.report_text) body.append(el("pre", "report-text", r.report_text));
-  else body.append(el("div", "muted", r.status === "nothing" ? "Nothing had changed." : "No details were kept for this run."));
+  else body.append(el("div", "muted", t(r.status === "nothing" ? "Nothing had changed." : "No details were kept for this run.")));
 }
 
 $("history-job").onchange = () => loadHistory();
@@ -459,13 +493,22 @@ let justSaved = null;              // job id whose form shows "Saved." once it i
 
 function formValues(form) {
   const f = form.elements;
-  const num = (name) => Number(f[name].value);
+  const number = (name) => Number(f[name].value);
   return {
     id: form.dataset.id || undefined, name: f.name.value, source: f.source.value, remote_root: f.remote_root.value,
     skip_dir_names: splitLines(f.skip_dir_names.value), skip_paths: splitLines(f.skip_paths.value),
-    skip_files: splitLines(f.skip_files.value), bundle_mb: num("bundle_mb"), big_file_mb: num("big_file_mb"),
-    keep_versions: num("keep_versions"), keep_days: num("keep_days"),
+    skip_files: splitLines(f.skip_files.value), bundle_mb: number("bundle_mb"), big_file_mb: number("big_file_mb"),
+    keep_versions: number("keep_versions"), keep_days: number("keep_days"),
+    schedule: f.schedule.value, schedule_time: f.schedule_time.value, schedule_hours: number("schedule_hours"),
   };
+}
+
+// the time / hours fields that go with the chosen automatic backup
+function showAuto(form) {
+  const mode = form.elements.schedule.value;
+  form.querySelector(".auto-time").hidden = mode !== "daily";
+  form.querySelector(".auto-hours").hidden = mode !== "hours";
+  form.querySelector(".auto-hint").hidden = mode === "off";
 }
 
 function fillForm(form, job) {
@@ -480,13 +523,16 @@ function fillForm(form, job) {
   f.big_file_mb.value = Math.round((job.big_file || 5 * MB) / MB);
   f.keep_versions.value = job.keep_versions ?? 5;
   f.keep_days.value = job.keep_days ?? 30;
+  f.schedule.value = job.schedule || "off";
+  f.schedule_time.value = job.schedule_time || "21:00";
+  f.schedule_hours.value = job.schedule_hours ?? 6;
   form._saved = JSON.stringify(formValues(form));
   form._job = job;
   form.querySelector(".form-sub").textContent = job.id ? `${job.source}  →  files.ir / ${job.remote_root}` : "";
   f.source.disabled = f.remote_root.disabled = !!job.locked;
   form.querySelector(".browse").disabled = !!job.locked;
   form.querySelector(".lock-note").hidden = !job.locked;
-  form.querySelector(".form-title").textContent = job.id ? job.name : "New backup job";
+  form.querySelector(".form-title").textContent = job.id ? job.name : t("New backup job");
   form.querySelector(".remove").hidden = !job.id;
   formChanged(form);
 }
@@ -500,13 +546,17 @@ function formChanged(form) {
   if (form._job.locked) {
     const was = JSON.parse(form._saved);
     if (now.bundle_mb !== was.bundle_mb || now.big_file_mb !== was.big_file_mb) {
-      warn.push("Changing the bundle sizes re-packs the folders: the next backup uploads most bundles again.");
+      warn.push(t("Changing the bundle sizes re-packs the folders: the next backup uploads most bundles again."));
     }
     const rules = ["skip_dir_names", "skip_paths", "skip_files"];
     if (rules.some((k) => JSON.stringify(now[k]) !== JSON.stringify(was[k]))) {
-      warn.push("Files that the new rules skip leave the backup: the next backup shows them as deleted (red in the preview).");
+      warn.push(t("Files that the new rules skip leave the backup: the next backup shows them as deleted (red in the preview)."));
     }
   }
+  if (now.schedule !== "off" && settingsData && !settingsData.app.start_with_windows) {
+    warn.push(t("Start with Windows is off (App, below): automatic backups only run while Pastoo is open."));
+  }
+  showAuto(form);
   const box = form.querySelector(".warn");
   box.innerHTML = warn.join("<br>");
   box.hidden = !warn.length;
@@ -530,8 +580,8 @@ function setFolded(form, fold) {
 function measureForm(form) {
   const v = formValues(form);
   const box = form.querySelector(".measure");
-  if (!v.source.trim()) { box.textContent = "Choose the folder to back up."; return; }
-  box.textContent = "Counting ...";
+  if (!v.source.trim()) { box.textContent = t("Choose the folder to back up."); return; }
+  box.textContent = t("Counting ...");
   form._ref = String(Math.random());
   send({ type: "measure", job: v, ref: form._ref });
 }
@@ -542,13 +592,14 @@ function showMeasure(m) {
   const box = form.querySelector(".measure");
   box.replaceChildren();
   const head = el("div");
-  head.innerHTML = `Backed up with these rules: <b>${m.files.toLocaleString()} files · ${size(m.size)}</b> in about ${plural(m.bundles, "bundle")}` +
-    ` &nbsp;·&nbsp; skipped: ${m.skipped_files.toLocaleString()} files · ${size(m.skipped_size)}`;
+  head.innerHTML = t("Backed up with these rules: <b>{files} · {size}</b> in about {bundles}",
+                     { files: t("{n} files", { n: m.files }), size: size(m.size), bundles: plural(m.bundles, "bundle") }) +
+    t(" &nbsp;·&nbsp; skipped: {files} · {size}", { files: t("{n} files", { n: m.skipped_files }), size: size(m.skipped_size) });
   box.append(head);
   if (m.skipped.length) {
     const grid = el("div", "skips");
     for (const [what, files, bytes] of m.skipped) grid.append(el("span", "", what), el("span", "", plural(files, "file")), el("span", "", size(bytes)));
-    box.append(el("div", "", "Biggest skipped:"), grid);
+    box.append(el("div", "", t("Biggest skipped:")), grid);
   }
 }
 
@@ -574,17 +625,17 @@ function makeForm(job) {
   form.onsubmit = (e) => {
     e.preventDefault();
     savingForm = form;
-    setFormMsg(form, "Saving ...", "");
+    setFormMsg(form, t("Saving ..."), "");
     send({ type: "save_job", job: formValues(form) });
   };
   form.querySelector(".cancel").onclick = () => fillForm(form, form._job);
   form.querySelector(".remove").onclick = () => {
-    if (!confirm(`Remove "${form._job.name}" from Pastoo?\nIts backup on files.ir stays as it is.`)) return;
+    if (!confirm(t("Remove \"{name}\" from Pastoo?\nIts backup on files.ir stays as it is.", { name: form._job.name }))) return;
     savingForm = form;
     send({ type: "remove_job", id: form.dataset.id });
   };
   form.querySelector(".browse").onclick = async () => {
-    if (!(window.pywebview && window.pywebview.api)) { showError("The folder dialog works in the app's own window - type the folder instead."); return; }
+    if (!(window.pywebview && window.pywebview.api)) { showError(t("The folder dialog works in the app's own window - type the folder instead.")); return; }
     const folder = await window.pywebview.api.pick_folder(form.elements.source.value);
     if (!folder) return;
     const f = form.elements;
@@ -610,10 +661,11 @@ function showSettings(m) {
   settingsLoaded = true;
   settingsData = m;
   const status = $("key-status");
-  status.textContent = m.key ? "Key saved in Windows Credential Manager." : "No files.ir key yet - paste one below.";
+  status.textContent = t(m.key ? "Key saved in Windows Credential Manager." : "No files.ir key yet - paste one below.");
   status.className = m.key ? "good" : "bad";
   $("app-autostart").checked = m.app.start_with_windows;
   if (document.activeElement !== $("app-reminder")) $("app-reminder").value = m.app.reminder_days;
+  $("app-language").value = m.app.language || "auto";
   // keep forms with unsaved edits; redraw the rest
   const box = $("job-forms");
   for (const job of m.jobs) {
@@ -627,7 +679,7 @@ function showSettings(m) {
     if (id && !m.jobs.some((j) => j.id === id)) { form.remove(); forms.delete(id); }
   }
   if (justSaved && forms.has(justSaved)) {
-    setFormMsg(forms.get(justSaved), "Saved.", "good");
+    setFormMsg(forms.get(justSaved), t("Saved."), "good");
     justSaved = null;
   }
 }
@@ -647,7 +699,7 @@ function onSaved(m) {
   }
   if (m.what === "key") {
     $("key-input").value = "";
-    $("key-status").textContent = "Key checked with files.ir and saved in Windows Credential Manager.";
+    $("key-status").textContent = t("Key checked with files.ir and saved in Windows Credential Manager.");
   }
 }
 
@@ -660,20 +712,24 @@ $("job-add").onclick = () => {
   form.querySelector(".cancel").hidden = true;
   const remove = form.querySelector(".remove");
   remove.hidden = false;
-  remove.textContent = "Cancel";
+  remove.textContent = t("Cancel");
   remove.onclick = () => { form.remove(); forms.delete(""); };
 };
 $("key-save").onclick = () => {
-  $("key-status").textContent = "Checking the key with files.ir ...";
+  $("key-status").textContent = t("Checking the key with files.ir ...");
   $("key-status").className = "muted";
   send({ type: "set_key", key: $("key-input").value });
 };
 $("key-test").onclick = () => {
-  $("key-status").textContent = "Connecting to files.ir ...";
+  $("key-status").textContent = t("Connecting to files.ir ...");
   $("key-status").className = "muted";
   send({ type: "test_key" });
 };
 $("app-autostart").onchange = () => send({ type: "save_app", app: { start_with_windows: $("app-autostart").checked } });
+$("app-language").onchange = () => {
+  send({ type: "save_app", app: { language: $("app-language").value } });
+  setTimeout(() => location.reload(), 400);         // everything drawn again in the new language
+};
 
 // ---------- files.ir usage (Settings, and a warning on every page from 70 %) ----------
 
@@ -682,7 +738,7 @@ const WARN_AT = 0.7;
 function showUsage(u) {
   if (!u) return;
   const lim = u.limits;
-  const describe = (l) => `${size(l.space)} · ${l.files.toLocaleString()} files · ${size(l.file)} per file`;
+  const describe = (l) => t("{space} · {files} · {file} per file", { space: size(l.space), files: t("{n} files", { n: l.files }), file: size(l.file) });
   $("limits-mode").value = u.mode;
   $("limits-check").hidden = u.mode !== "auto";
   $("custom-limits").hidden = u.mode !== "custom";
@@ -691,12 +747,13 @@ function showUsage(u) {
     text.textContent = describe(lim);
     text.className = "muted";
   } else if (u.plan_error) {
-    text.textContent = `files.ir did not say (${u.plan_error}) - using ${u.detected ? "what it said last time" : "the Free plan's limits"}: ${describe(lim)}`;
+    text.textContent = t("files.ir did not say ({error}) - using {which}: {limits}", { error: tMsg(u.plan_error),
+      which: t(u.detected ? "what it said last time" : "the Free plan's limits"), limits: describe(lim) });
     text.className = "bad";
   } else {
     // the plan's name comes from files.ir in Persian: <bdi> keeps it from reordering the English around it
     text.replaceChildren(el("bdi", "", lim.name || "?"),
-                         `: ${describe(lim)}` + (u.detected ? ` · read ${ago(u.detected.checked)}` : ""));
+                         `: ${describe(lim)}` + (u.detected ? t(" · read {when}", { when: ago(u.detected.checked) }) : ""));
     text.className = "muted";
   }
   if (![$("custom-space"), $("custom-files"), $("custom-file")].includes(document.activeElement)) {
@@ -713,23 +770,23 @@ function showUsage(u) {
   };
   const space = u.space_used == null ? 0 : bar("space-bar", u.space_used, u.space_total);
   const files = bar("files-bar", u.files, u.files_total);
-  $("space-text").textContent = u.space_used == null ? "unknown" :
-    `${size(u.space_used)} of ${size(u.space_total)} (${Math.round(space * 100)}%)`;
-  $("files-text").textContent = `about ${u.files.toLocaleString()} of ${u.files_total.toLocaleString()} (${Math.round(files * 100)}%)`;
-  $("usage-note").textContent = (u.error ? `Could not ask files.ir about the space: ${u.error}. ` : "") +
-    `Space is the whole account's; files are Pastoo's own (other apps' files on the account count too). ` +
-    `Files bigger than ${size(u.part_size)} go up in parts. Checked ${ago(u.checked)}.`;
+  $("space-text").textContent = u.space_used == null ? t("unknown") :
+    t("{used} of {total} ({p}%)", { used: size(u.space_used), total: size(u.space_total), p: Math.round(space * 100) });
+  $("files-text").textContent = t("about {used} of {total} ({p}%)", { used: u.files, total: u.files_total, p: Math.round(files * 100) });
+  $("usage-note").textContent = (u.error ? t("Could not ask files.ir about the space: {error}. ", { error: tMsg(u.error) }) : "") +
+    t("Space is the whole account's; files are Pastoo's own (other apps' files on the account count too). Files bigger than {size} go up in parts. Checked {when}.",
+      { size: size(u.part_size), when: ago(u.checked) });
   const warn = $("usage-warn");
   const worst = Math.max(space, files);
   warn.hidden = worst < WARN_AT;
   warn.className = `banner${worst >= 0.9 ? " error" : ""}`;
-  warn.textContent = `files.ir is ${Math.round(worst * 100)}% full (${space >= files ? "space" : "number of files"}) - ` +
-    "see Settings → files.ir. A bigger plan, fewer old versions, or more skips will help.";
+  warn.textContent = t("files.ir is {p}% full ({what}) - see Settings → files.ir. A bigger plan, fewer old versions, or more skips will help.",
+                       { p: Math.round(worst * 100), what: t(space >= files ? "space" : "number of files") });
 }
 
 $("limits-mode").onchange = () => send({ type: "save_app", app: { limits_mode: $("limits-mode").value } });
 $("limits-check").onclick = () => {
-  $("plan-limits").textContent = "Asking files.ir ...";
+  $("plan-limits").textContent = t("Asking files.ir ...");
   send({ type: "usage" });
 };
 $("custom-save").onclick = () => send({ type: "save_app", app: { custom_limits: {
@@ -744,7 +801,7 @@ $("app-reminder").onchange = () => {
 
 function showError(message) {
   const box = $("error");
-  box.textContent = message;
+  box.textContent = tMsg(message);
   box.hidden = false;
   clearTimeout(showError.timer);
   showError.timer = setTimeout(() => { box.hidden = true; }, 7000);
@@ -761,7 +818,7 @@ function loadRestore() {
   if (!job) return;
   restore.job = job;
   restore.picked.clear();
-  $("restore-tree").replaceChildren(el("div", "loading", "Loading ..."));
+  $("restore-tree").replaceChildren(el("div", "loading", t("Loading ...")));
   send({ type: "browse", job });
 }
 
@@ -772,21 +829,21 @@ function showBrowse(m) {
   const select = $("restore-source");
   const keep = select.value;
   select.replaceChildren();
-  const latest = el("option", "", "Latest backup");
+  const latest = el("option", "", t("Latest backup"));
   latest.value = "latest";
   select.append(latest);
   if (m.versions.length) {
     const group = document.createElement("optgroup");
-    group.label = "Old versions (bundles that were replaced)";
+    group.label = t("Old versions (bundles that were replaced)");
     for (const v of m.versions) {
-      const o = el("option", "", `until ${when(v.created)} · ${v.key} (${size(v.size)})`);
+      const o = el("option", "", t("until {when} · {key} ({size})", { when: when(v.created), key: v.key, size: size(v.size) }));
       o.value = String(v.id);
       group.append(o);
     }
     select.append(group);
   }
   select.value = [...select.options].some((o) => o.value === keep) ? keep : "latest";
-  $("verify-all").textContent = `Check everything (${plural(m.bundles, "bundle")}, ${size(m.remote_size)})`;
+  $("verify-all").textContent = t("Check everything ({bundles}, {size})", { bundles: plural(m.bundles, "bundle"), size: size(m.remote_size) });
   showLastCheck(m.last_check);
   chooseSource();
 }
@@ -797,7 +854,7 @@ function chooseSource() {
   if (restore.source === "latest") return setRestoreFiles(restore.browse.files);
   const id = Number(restore.source);
   if (restore.versions.has(id)) return setRestoreFiles(restore.versions.get(id));
-  $("restore-tree").replaceChildren(el("div", "loading", "Downloading that version from files.ir ..."));
+  $("restore-tree").replaceChildren(el("div", "loading", t("Downloading that version from files.ir ...")));
   updateSummary();
   send({ type: "version_files", job: restore.job, id });
 }
@@ -851,7 +908,7 @@ function renderPickNode(node) {
     const d = el("details");
     const s = el("summary");
     const total = child.rels.reduce((sum, r) => sum + fileSize.get(r), 0);
-    s.append(checkbox(child.rels), el("span", "dir", name), el("span", "size", `${child.rels.length} · ${size(total)}`));
+    s.append(checkbox(child.rels), el("span", "dir", name), el("span", "size", `${plural(child.rels.length, "file")} · ${size(total)}`));
     d.append(s);
     d.addEventListener("toggle", () => {   // the contents are made when the folder is first opened
       if (d.open && d.children.length === 1) {
@@ -869,7 +926,7 @@ function renderPick() {
   const box = $("restore-tree");
   const q = $("restore-filter").value.trim().toLowerCase();
   box.replaceChildren();
-  if (!restore.files.length) box.append(el("div", "note", "Nothing in here."));
+  if (!restore.files.length) box.append(el("div", "note", t("Nothing in here.")));
   else if (!q) box.append(renderPickNode(restore.tree));
   else {
     // folders whose own name matches (tick one = all its files), then matching files
@@ -888,12 +945,12 @@ function renderPick() {
     for (const [path, rels] of [...folders.entries()].slice(0, 50)) {
       const row = el("label", "file");
       const total = rels.reduce((sum, r) => sum + fileSize.get(r), 0);
-      row.append(checkbox(rels), el("span", "dir", path), el("span", "size", `${rels.length} · ${size(total)}`));
+      row.append(checkbox(rels), el("span", "dir", path), el("span", "size", `${plural(rels.length, "file")} · ${size(total)}`));
       box.append(row);
     }
     for (const [rel, bytes] of hits.slice(0, 300)) box.append(fileRow(rel.split("/").pop(), rel, bytes, true));
-    if (!folders.size && !hits.length) box.append(el("div", "note", "Nothing matches."));
-    else if (hits.length > 300 || folders.size > 50) box.append(el("div", "note", "More match - type more of the name."));
+    if (!folders.size && !hits.length) box.append(el("div", "note", t("Nothing matches.")));
+    else if (hits.length > 300 || folders.size > 50) box.append(el("div", "note", t("More match - type more of the name.")));
   }
   refreshChecks();
 }
@@ -910,18 +967,19 @@ function refreshChecks() {
 function updateSummary() {
   const n = restore.picked.size;
   const total = [...restore.picked].reduce((sum, r) => sum + (fileSize.get(r) || 0), 0);
-  $("restore-summary").innerHTML = n ? `<b>${plural(n, "file")}</b> chosen · ${size(total)}`
-    : "Tick the files or folders to get back.";
+  $("restore-summary").innerHTML = n ? t("<b>{files}</b> chosen · {size}", { files: plural(n, "file"), size: size(total) })
+    : t("Tick the files or folders to get back.");
   $("restore-go").disabled = !n || !!run || !!task;
-  $("restore-go").textContent = n ? `Restore ${plural(n, "file")}` : "Restore";
+  $("restore-go").textContent = n ? t("Restore {files}", { files: plural(n, "file") }) : t("Restore");
 }
 
 function showLastCheck(c) {
   const box = $("verify-last");
   box.className = c && c.bad ? "bad" : "muted";
-  box.textContent = !c ? "Not checked yet." :
-    `Last check: ${when(c.time)} (${ago(c.time)}) · ${c.full ? "everything" : plural(c.bundles, "random bundle")}, ` +
-    `${plural(c.files, "file")} · ${c.bad ? `${plural(c.bad, "problem")}` : "all good"}`;
+  box.textContent = !c ? t("Not checked yet.") :
+    t("Last check: {when} ({ago}) · {what}, {files} · {result}", { when: when(c.time), ago: ago(c.time),
+      what: c.full ? t("everything") : plural(c.bundles, "random bundle"), files: plural(c.files, "file"),
+      result: c.bad ? plural(c.bad, "problem") : t("all good") });
 }
 
 function renderTask() {
@@ -943,26 +1001,26 @@ function renderTask() {
   updateSummary();
 }
 
-function showTaskResult(t) {
-  const r = t.result;
-  const box = $(`${t.kind}-result`);
+function showTaskResult(done) {
+  const r = done.result;
+  const box = $(`${done.kind}-result`);
   let text;
-  if (t.kind === "restore") {
+  if (done.kind === "restore") {
     text = r.status === "ok" || r.written !== undefined
-      ? `Restored ${plural(r.written || 0, "file")} into ${r.to}.` : `The restore failed: ${r.error}`;
-    if (r.skipped_count) text += ` ${r.skipped_count === 1 ? "1 file was" : `${r.skipped_count} files were`} already there and skipped - tick "Replace" to overwrite.`;
-    if (r.bad && r.bad.length) text += ` ${plural(r.bad.length, "file")} FAILED the check and ${r.bad.length === 1 ? "was" : "were"} not written: ${r.bad.slice(0, 5).join(", ")}`;
-    if (r.error && r.written !== undefined) text += ` ${r.error}`;
+      ? t("Restored {files} into {to}.", { files: plural(r.written || 0, "file"), to: r.to }) : t("The restore failed: {error}", { error: tMsg(r.error) });
+    if (r.skipped_count) text += t(" {n} files were already there and skipped - tick \"Replace\" to overwrite.", { n: r.skipped_count });
+    if (r.bad && r.bad.length) text += t(" {files} FAILED the check and were not written: {which}", { files: plural(r.bad.length, "file"), which: r.bad.slice(0, 5).join(", ") });
+    if (r.error && r.written !== undefined) text += ` ${tMsg(r.error)}`;
   } else {
-    text = r.status === "ok" ? `All ${plural(r.files, "file")} in ${plural(r.bundles, "bundle")} are fine.`
-      : r.status === "cancelled" ? "Stopped."
-      : r.problems ? `${plural(r.problems.length, "problem")}: ` + r.problems.slice(0, 5).map((p) => `${p[0]} ${p[1]} (${p[2]})`).join("; ")
-      : `The check failed: ${r.error}`;
+    text = r.status === "ok" ? t("All {files} in {bundles} are fine.", { files: plural(r.files, "file"), bundles: plural(r.bundles, "bundle") })
+      : r.status === "cancelled" ? t("Stopped.")
+      : r.problems ? t("{problems}: ", { problems: plural(r.problems.length, "problem") }) + r.problems.slice(0, 5).map((p) => `${p[0]} ${p[1]} (${p[2]})`).join("; ")
+      : t("The check failed: {error}", { error: tMsg(r.error) });
   }
   box.className = `result ${r.status === "ok" ? "ok" : r.status === "cancelled" ? "cancelled" : "failed"}`;
   box.textContent = text;
   box.hidden = false;
-  if (t.job === restore.job) send({ type: "browse", job: restore.job });   // last check, new versions
+  if (done.job === restore.job) send({ type: "browse", job: restore.job });   // last check, new versions
 }
 
 $("restore-job").onchange = () => loadRestore();
@@ -971,7 +1029,7 @@ $("restore-filter").oninput = () => renderPick();
 $("restore-folder").oninput = () => { document.querySelector("input[name=restore-to][value=other]").checked = true; };
 $("restore-browse").onclick = async () => {
   if (!(window.pywebview && window.pywebview.api)) {
-    showError("The folder dialog works in the app's own window - type the folder instead.");
+    showError(t("The folder dialog works in the app's own window - type the folder instead."));
     return;
   }
   const folder = await window.pywebview.api.pick_folder($("restore-folder").value);
@@ -984,12 +1042,12 @@ $("restore-go").onclick = () => {
   const original = document.querySelector("input[name=restore-to]:checked").value === "original";
   const to = original ? "" : $("restore-folder").value.trim();
   if (!original && !/^([a-zA-Z]:\\|\\\\)/.test(to)) {
-    showError("Choose the folder to restore into - a full path such as D:\\Restored.");
+    showError(t("Choose the folder to restore into - a full path such as D:\\Restored."));
     return;
   }
   const overwrite = $("restore-overwrite").checked;
-  if (overwrite && original && !confirm(`Replace files in ${restore.browse.source} with their backed-up copies?\n` +
-                                       "Changes made to them since that backup will be lost.")) return;
+  if (overwrite && original && !confirm(t("Replace files in {folder} with their backed-up copies?\nChanges made to them since that backup will be lost.",
+                                         { folder: restore.browse.source }))) return;
   $("restore-result").hidden = true;
   send({ type: "restore", job: restore.job, source: restore.source === "latest" ? "latest" : Number(restore.source),
          files: [...restore.picked], to, overwrite });
@@ -1015,6 +1073,8 @@ function connect() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === "hello") {
+      if (LANG !== m.lang && !connect.languageSet) setLanguage(m.lang);    // before anything is drawn
+      connect.languageSet = true;
       $("version").textContent = `v${m.version}`;
       run = m.run && m.run.phase !== "done" ? m.run : null;
       lines = run ? run.lines || [] : [];
@@ -1089,23 +1149,23 @@ function connect() {
     } else if (m.type === "saved") {
       onSaved(m);
     } else if (m.type === "key_test") {
-      $("key-status").textContent = m.ok ? "Connected - files.ir accepts the key." : `files.ir refused: ${m.message}`;
+      $("key-status").textContent = m.ok ? t("Connected - files.ir accepts the key.") : t("files.ir refused: {message}", { message: tMsg(m.message) });
       $("key-status").className = m.ok ? "good" : "bad";
     } else if (m.type === "error") {
       if (m.where && savingForm && ["save_job", "remove_job"].includes(m.where)) {
-        setFormMsg(savingForm, m.message, "bad");
+        setFormMsg(savingForm, tMsg(m.message), "bad");
         savingForm = null;
         return;
       }
-      if (m.where === "set_key") { $("key-status").textContent = m.message; $("key-status").className = "bad"; return; }
+      if (m.where === "set_key") { $("key-status").textContent = tMsg(m.message); $("key-status").className = "bad"; return; }
       if (m.where === "measure") {
         const f = [...forms.values()].find((x) => x._ref === m.ref);
-        if (f) f.querySelector(".measure").textContent = m.message;
+        if (f) f.querySelector(".measure").textContent = tMsg(m.message);
         return;
       }
       showError(m.message);
       if (restore.source !== "latest" && !restore.versions.has(Number(restore.source))) {
-        $("restore-tree").replaceChildren(el("div", "note", "Could not open that version."));
+        $("restore-tree").replaceChildren(el("div", "note", t("Could not open that version.")));
       }
     }
   };

@@ -1,3 +1,3 @@
 """Pastoo - incremental backups of folders to files.ir, in zip bundles."""
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"

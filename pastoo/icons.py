@@ -8,6 +8,7 @@ COLOURS = {
     "old": (210, 153, 34),       # no good backup for a while
     "failed": (248, 81, 73),     # the last run failed
     "running": (61, 139, 253),   # backing up now
+    "held": (210, 153, 34),      # an automatic backup waits for a look at its changes
 }
 
 

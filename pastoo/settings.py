@@ -14,6 +14,7 @@ FREE = {"name": "Free", "space": 5 * GB, "files": 1000, "file": 50 * MB}
 
 DEFAULTS = {
     "reminder_days": 7,             # tray turns yellow / a reminder after this many days without a backup
+    "language": "auto",             # the window, tray and notifications: "auto" (as Windows) | "en" | "fa"
     "start_with_windows": False,
     # the account's limits drive the usage bars and the part size:
     "limits_mode": "auto",          # "auto": read from files.ir (detected_limits) | "custom": custom_limits
